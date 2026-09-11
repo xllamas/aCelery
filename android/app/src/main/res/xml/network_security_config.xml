@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The whole product is served over plain HTTP from an embedded server on
+  127.0.0.1:8123, because xscript.js reaches its native bridge through that
+  origin (see doc/web-bundle-port-plan.md §2). Cleartext has been off by
+  default since Android 9, so loopback has to be allowed explicitly.
+
+  Only loopback is listed: cleartext stays blocked everywhere else, so the
+  outbound HTTP proxy (opt=http) cannot silently downgrade a user's request.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

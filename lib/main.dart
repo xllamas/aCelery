@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'src/acelery_runtime.dart';
+import 'src/shell/ide_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const ACeleryApp());
 }
 
@@ -16,61 +18,48 @@ class ACeleryApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF7CB342)),
       ),
-      home: const BootScreen(),
+      home: const _Boot(),
     );
   }
 }
 
-/// Brings up the bundle and the server, and reports the result.
-///
-/// This is a stand-in: Phase 2 replaces it with the WebView that loads
-/// [ACeleryRuntime.ideUrl]. It exists so Phase 0 and Phase 1 can be verified
-/// on a real device.
-class BootScreen extends StatefulWidget {
-  const BootScreen({super.key});
+/// Installs the web bundle and starts the server, then hands over to the IDE.
+class _Boot extends StatefulWidget {
+  const _Boot();
 
   @override
-  State<BootScreen> createState() => _BootScreenState();
+  State<_Boot> createState() => _BootState();
 }
 
-class _BootScreenState extends State<BootScreen> {
+class _BootState extends State<_Boot> {
   late final Future<ACeleryRuntime> _runtime = ACeleryRuntime.start();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('aCelery')),
-      body: Center(
-        child: FutureBuilder<ACeleryRuntime>(
-          future: _runtime,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return Padding(
+    return FutureBuilder<ACeleryRuntime>(
+      future: _runtime,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('aCelery')),
+            body: Center(
+              child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
                   'Could not start:\n${snapshot.error}',
                   textAlign: TextAlign.center,
                 ),
-              );
-            }
-            if (!snapshot.hasData) {
-              return const CircularProgressIndicator();
-            }
-            final runtime = snapshot.data!;
-            return Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Bundle installed, server running.'),
-                  const SizedBox(height: 8),
-                  SelectableText('${runtime.ideUrl}'),
-                ],
               ),
-            );
-          },
-        ),
-      ),
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return IdeScreen(runtime: snapshot.data!);
+      },
     );
   }
 }

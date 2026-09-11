@@ -5,6 +5,39 @@ import 'package:archive/archive.dart';
 
 import 'paths.dart';
 
+/// Unzips [bytes] into [into], refusing any entry that would land outside it.
+///
+/// Shared by the shipped bundle and by project import, which is the case the
+/// guard actually matters for: those archives come from the user.
+/// [skip] is consulted per destination file; returning true leaves the file on
+/// disk untouched.
+Future<void> extractArchive(
+  Uint8List bytes,
+  Directory into, {
+  bool Function(File target)? skip,
+}) async {
+  final archive = ZipDecoder().decodeBytes(bytes);
+  await into.create(recursive: true);
+
+  for (final entry in archive) {
+    final target = File(ACeleryPaths.normalize('${into.path}/${entry.name}'));
+
+    if (!ACeleryPaths.isInside(into, target)) {
+      throw FileSystemException('Zip entry outside destination', entry.name);
+    }
+
+    if (entry.isDirectory) {
+      await Directory(target.path).create(recursive: true);
+      continue;
+    }
+
+    if (skip != null && skip(target)) continue;
+
+    await target.parent.create(recursive: true);
+    await target.writeAsBytes(entry.readBytes() ?? const []);
+  }
+}
+
 /// Installs the aCelery web bundle (`assets/aCelery.zip`) into the app's
 /// documents directory on first run, and refreshes it when the shipped bundle
 /// changes.
@@ -48,34 +81,12 @@ class BundleInstaller {
   }
 
   Future<void> install() async {
-    final bytes = await loadAsset();
-    final archive = ZipDecoder().decodeBytes(bytes);
-
-    final destRoot = Directory(paths.root);
-    await destRoot.create(recursive: true);
-
-    for (final entry in archive) {
-      final target = File(ACeleryPaths.normalize('${paths.root}/${entry.name}'));
-
-      // Reject entries that would escape the destination ("zip slip"). The
-      // same unzip path is reused for user-supplied project archives.
-      if (!ACeleryPaths.isInside(destRoot, target)) {
-        throw FileSystemException('Zip entry outside destination', entry.name);
-      }
-
-      if (entry.isDirectory) {
-        await Directory(target.path).create(recursive: true);
-        continue;
-      }
-
-      // Never clobber user-created content.
-      if (_isUserData(target.path)) {
-        if (await target.exists()) continue;
-      }
-
-      await target.parent.create(recursive: true);
-      await target.writeAsBytes(entry.readBytes() ?? const []);
-    }
+    await extractArchive(
+      await loadAsset(),
+      Directory(paths.root),
+      // Never clobber user-created content: projects, databases, files, logs.
+      skip: (target) => _isUserData(target.path) && target.existsSync(),
+    );
 
     // The zip ships these as empty directories; make sure they exist even if a
     // future bundle drops them.

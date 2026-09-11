@@ -208,17 +208,40 @@ live read-only in the Flutter asset bundle.
 - Base64 in/out on the `query=` parameter, matching `btoa()` on the JS side.
 - **Do not** register a `JavaScriptChannel` named `Android`.
 
-### Phase 2 — Flutter shell
+### Phase 2 — Flutter shell ✅ done
 
 - `webview_flutter` loading `http://localhost:8123/system/index.html`.
-- Replaces `ACeleryActivity` + `ACeleryUserAppActivity`: one `WebViewWidget`,
-  routed by URL rather than two Activities.
-- Back button → `forceSaveFile()` via `runJavaScript` before pop, as the
-  original did.
-- `ACeleryBackground` (the foreground `Service`) **disappears** — the server is
-  now an isolate inside the app. Reassess whether background serving is still
-  wanted; if so it becomes a foreground-service plugin decision, not a
-  requirement.
+- `IdeScreen` replaces `ACeleryActivity`; `UserAppScreen` replaces
+  `ACeleryUserAppActivity`, as a pushed route rather than a second Activity.
+- Back → `forceSaveFile()`, then page history, then pop. App lifecycle
+  `paused`/`inactive` also flushes, as `onPause` did.
+- `ACeleryBackground` is gone — the server runs in-process.
+
+**One correction to §2.** Registering *no* JavaScript channel turned out to be
+too strong. Four xScript entry points ask the host to *do* something rather
+than return data, and each one's browser fallback is a dead end in a Flutter
+WebView: `xRunUserApp` calls `window.open` (needs a WebChromeClient window
+callback that webview_flutter does not expose — it hard-codes
+`setSupportMultipleWindows(true)`), `xCloseApp` calls `window.close` (a no-op
+on a top-level page), `xImportProject.get` has a literally empty else branch,
+and the two `.get()` download helpers submit a form whose `Content-Disposition`
+response a Flutter WebView cannot save.
+
+These are all **fire-and-forget**, so a one-way async channel suits them. The
+shell registers one named `ACeleryHost` — never `Android`, which would flip
+xscript.js onto its synchronous branch — and injects a shim at
+`onPageFinished` that overrides exactly those five functions. The bundle itself
+stays untouched, so the Bootstrap 5 swap in Phase 3 carries no host-specific
+edits.
+
+Downloads are resolved **in-process**: the shell reads the pending export
+straight out of `ExportBridge` rather than re-fetching over HTTP, then hands it
+to the system share sheet (`DownloadManager` into `Downloads/` is a
+scoped-storage permission dance now, and the share sheet lets the user choose).
+
+`window.alert` is also handled — an unhandled JS dialog blocks a WebView
+permanently — and so are external links, which would otherwise replace a
+running user app with a web page and strip it of its bridge.
 
 ### Phase 3 — Bootstrap 5 migration of the bundle
 
@@ -272,7 +295,7 @@ live read-only in the Flutter asset bundle.
 | Risk | Severity | Mitigation |
 |---|---|---|
 | Chromium drops sync XHR on the main thread | **High** — kills the bridge | No action now; it is still supported. Knowing this is the single point of failure is the mitigation. |
-| WebView blocks cleartext to localhost | Medium | Android network-security-config + iOS `NSAllowsLocalNetworking`; verify on both early in Phase 2. |
+| WebView blocks cleartext to localhost | Medium | **Done in Phase 2**: `android/app/src/main/res/xml/network_security_config.xml` permits cleartext to `localhost`/`127.0.0.1` only and blocks it everywhere else; iOS `Info.plist` carries `NSAllowsLocalNetworking`. Verified in the merged manifest. |
 | BS3→BS5 class strings passed by hand | Medium | Phase 3.6 audit; contained to 2 files. |
 | Unzip-on-upgrade destroying user projects | **High** — data loss | Phase 0: never overwrite `www/user`, `db`, `files`. Bug present in the original. |
 | iOS has no precedent — app was Android-only | Medium | Bridge is pure Dart + HTTP, so it should port cleanly; `sqflite` and `path_provider` both support iOS. Validate in Phase 1. |

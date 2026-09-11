@@ -24,6 +24,19 @@ class ACeleryRuntime {
   /// URL the WebView should load — the IDE's entry point.
   Uri get ideUrl => server.baseUri.replace(path: '/system/index.html');
 
+  /// The IDE's app list, reached from the options menu.
+  Uri get myAppsUrl => server.baseUri
+      .replace(path: '/system/index.html', query: 'opt=apps');
+
+  /// The logcat viewer a debug run offers.
+  Uri get errorLogUrl => server.baseUri.replace(path: '/system/errorlog.html');
+
+  /// Loads one of the user's apps, the way `xRunUserApp` did.
+  Uri launcherUrl(String app) => server.baseUri.replace(
+        path: '/system/launcher.html',
+        queryParameters: {'app': app},
+      );
+
   static Future<ACeleryRuntime> start({
     DatabaseFactory? factory,
     int port = ACeleryServer.defaultPort,

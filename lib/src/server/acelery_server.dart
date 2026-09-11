@@ -56,6 +56,11 @@ class ACeleryServer {
 
   Uri get baseUri => Uri.parse('http://localhost:$boundPort');
 
+  /// True when the server is reachable from other devices. The Android
+  /// original was always in this state; it is now opt-in.
+  bool get isSharedOnNetwork =>
+      address != null && address != InternetAddress.loopbackIPv4;
+
   Future<void> start() async {
     if (_server != null) return;
 
