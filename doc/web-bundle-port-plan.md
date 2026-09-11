@@ -243,26 +243,87 @@ scoped-storage permission dance now, and the share sheet lets the user choose).
 permanently — and so are external links, which would otherwise replace a
 running user app with a web page and strip it of its bridge.
 
-### Phase 3 — Bootstrap 5 migration of the bundle
+### Phase 3 — Bootstrap 5 migration of the bundle ✅ done
 
-1. `tools/js/`: drop `jquery.min.js`, `jquery.mobile.min.js`, `bootstrap.min.js`
-   (3.x), `modernizr.custom.js`; add `bootstrap.bundle.min.js` 5.3.8,
-   Tempus Dominus 6, Font Awesome 6.
-2. `tools/css/`: replace Bootstrap 3 + the 19 bootswatch themes with their
-   Bootstrap 5 equivalents; drop `jquery.mobile.*.css` and `font-awesome` 4.
-   Re-derive `bootstrap_themes/acelery/` against BS5.
-3. Swap `xscript.js` / `xscript_crud.js` and replace
-   `xscript_bootstrap.js` → `xscript_bs5.js` from `xscript5/`.
-4. Update the four `<script>`/`<link>` blocks — `system/index.html`,
-   `launcher.html`, `errorlog.html`, `user/Example/example.*` — to the new file
-   names and the BS5 asset set.
-5. Replace the 7 glyphicons in `system/index.html` with Font Awesome 6.
-6. Visual pass on the IDE. API compatibility is proven (§3), but BS3→BS5
-   renamed a lot of *classes* — `.panel`→`.card`, `.form-group`→`.mb-3`,
-   `.pull-left`→`.float-start`, `.btn-default`→`.btn-secondary`,
-   `.col-xs-*`→`.col-*`. `xscript_bs5.js` emits the new ones internally, but
-   any class string passed by hand as a `clss` argument in `system/index.html`
-   or `example.js` needs auditing.
+The bundle is now a **source tree at `bundle/`**, packed into
+`assets/aCelery.zip` by `tool/build_bundle.sh`. Editing a binary zip was not
+reviewable; the zip is a build artifact and a test fails if it goes stale.
+Bump `ACeleryRuntime.bundleVersion` after a rebuild so installed devices
+refresh.
+
+1. `tools/js/`: dropped jQuery 1.8, jQuery Mobile, Bootstrap 3 JS, Modernizr
+   and `xscript_bootstrap.js`; added `bootstrap.bundle.min.js` 5.3.8 (carries
+   Popper), Tempus Dominus 6.10.4 and Font Awesome 6.7.2 (woff2 only — every
+   `src` lists woff2 first, so the ttf files were never fetched).
+2. `tools/css/`: all 18 themes replaced with **Bootswatch 5.3.8**. Bootswatch
+   renamed two themes at Bootstrap 4 — Paper→Materia, Readable→Litera — so
+   those ship under their old directory names and every value `xbTheme` offers
+   still resolves. `default` is stock Bootstrap; `acelery` is stock Bootstrap
+   plus the palette carried over from the Bootstrap 3 theme (`#283b41`
+   navbar, `#586d72` primary, `#86a0a4` brand). Dropped the glyphicon
+   webfonts, jQuery Mobile CSS, Font Awesome 4, and `acelery.min.css`,
+   `dlmenu.css`, `css/images/` and `fonts/icomoon/`, none of which anything
+   had referenced since 2014.
+3. `xscript.js`, `xscript_crud.js` swapped; `xscript_bootstrap.js` →
+   `xscript_bs5.js`.
+4. The four `<script>`/`<link>` blocks rewritten across `system/index.html`,
+   `launcher.html` and `errorlog.html`.
+5. All 11 glyphicons replaced with Font Awesome 6 equivalents.
+6. Visual pass done on a device — see the findings below.
+
+Net: **690 files → 464, 5.8 MB → 7.3 MB expanded** (1.72 MB zipped, unchanged).
+The tree grew because Bootstrap 5 themes are larger than Bootstrap 3 ones;
+compressed size did not move.
+
+#### The class-level compatibility check in §3 was not sufficient
+
+§3 reported "46 classes used, 119 provided, 0 missing" and concluded the IDE
+needed no rewrite. That compared **class names only**. At method level
+xscript5 had dropped 8 methods, 5 of them called by the shipped pages, and the
+Example app failed at load with `nav.addDropdown is not a function`.
+
+Restored in `xscript5/` (so the library and the bundle do not drift), each
+re-expressed in Bootstrap 5 rather than copied:
+
+| Method | Why it matters | Bootstrap 5 form |
+|---|---|---|
+| `xbNavBar.addDropdown` | every app with a menu | append the dropdown's own `li.nav-item.dropdown` |
+| `xbNavBar.getNavItem` | the IDE's enable/disable logic | track added items in `this.elements` |
+| `xbNavBarDropdown.addTitleWrapper` | the IDE wraps titles in `<h4>` | rewrite the toggle anchor |
+| `xbNavBarDropdown.disabled` | greys out whole menus | `.disabled` on the link, drop `data-bs-toggle` |
+| `xbNavBarItem.disabled` | greys out single items | `.nav-link.disabled`, handler saved on bind |
+| `xbTabs.removePane` | public API | the Bootstrap 3 version indexed `this.elements` with an undeclared `i`, so it always threw; this is what it documented |
+| `xbModal.setAutoRemove` | public API | `addEventListener` instead of jQuery |
+
+`xbTabs.removeAuxElement` was **not** restored: nothing in either library ever
+added an aux element, so it could only ever remove something that could not
+exist.
+
+A test now cross-references every method the shipped pages call against the
+library, which is the check §3 should have been.
+
+#### Two defects found in `xscript5` and fixed
+
+- **`xbCarousel` was never migrated.** It still emitted Bootstrap 3 markup —
+  `left carousel-control`, `data-slide`, `data-slide-to` and glyphicon
+  chevrons. Now `carousel-control-prev/next`, `data-bs-slide*` and Bootstrap's
+  own control-icon spans. (`xscript_crud.js` also still asked for
+  `glyphicon-info-sign`.)
+- **The navbar hamburger did nothing, and menus stacked down the page.**
+  `xbNavBar` put its items in no collapse wrapper and hard-coded the toggler
+  at `#sidebar-nav`, which only `xbSideBar` creates — and `xbSideBar` carries
+  only a close button, so it depends on that toggler. An app that puts items
+  straight on the navbar (both the IDE and the Example app) therefore got a
+  dead button and a menu eating a quarter of a phone screen. The toggler now
+  resolves its target on click: the offcanvas if a sidebar exists, otherwise
+  the navbar's own collapse. Both designs work; Bootstrap 3 behaviour is
+  restored.
+
+#### Verified on an API 36 emulator
+
+IDE main menu, My Apps, launching the Example app, its navbar and dropdown,
+`bootstrap.Modal`, and the IDE's `Project` dropdown with per-item enable and
+disable states all render and behave correctly, with a clean console.
 
 ### Phase 4 — optional, decide separately
 

@@ -1,0 +1,59 @@
+<html>
+<head>
+<meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
+<link rel="stylesheet" type="text/css" href="/tools/css/bootstrap_themes/acelery/bootstrap.min.css" />
+<link rel="stylesheet" type="text/css" href="/tools/fontawesome/css/all.min.css" />
+<link rel="stylesheet" type="text/css" href="/tools/css/tempus-dominus.min.css" />
+
+<script src="/tools/js/bootstrap.bundle.min.js" type="text/javascript"></script>
+<script src="/tools/js/tempus-dominus.min.js" type="text/javascript"></script>
+<script src="/tools/js/xscript.js" type="text/javascript" charset="utf-8"></script>
+<script src="/tools/js/xscript_bs5.js" type="text/javascript" charset="utf-8"></script>
+<script src="/tools/js/xscript_crud.js" type="text/javascript" charset="utf-8"></script>
+<script src="/tools/js/lazyload.js" type="text/javascript" charset="utf-8"></script>
+</head>
+<body>
+<script>
+/*  Copyright 2014: Xavier Llamas Rolland                      */ 
+/*                                                             */
+/*  This software distributed under the GPLv3 License          */
+/*                                                             */
+////////////////////////////////////////////////////////////////
+
+
+var reqJsFiles = [], reqCssFiles = [];
+
+function loadFiles(){
+   var projF = new xFile();
+   var path = projF.getExtStoragePath() + "/aCelery/www/user/";
+   var app = xGetURLParameter("app");
+   var fname, ext;
+   
+   if (!app)
+      return false;
+   var files = projF.listFiles(app,path);
+   if (files){
+      for (var i = 0; i < files.length; i++){
+         if (!files[i].directory){
+            fname = files[i].fname;
+            ext = fname.substr(fname.lastIndexOf('.') + 1);
+            if (ext == "js")
+               reqJsFiles.push("/user/" + app + "/" + fname);
+            else
+            if (ext == "css")
+               reqCssFiles.push("/user/" + app + "/" + fname);
+         }
+      }
+   }
+   if (reqCssFiles.length > 0){
+      LazyLoad.css(reqCssFiles,function(){});
+   }
+   if (reqJsFiles.length > 0){
+      LazyLoad.js(reqJsFiles,function(){main()});
+   }
+}
+
+loadFiles();
+</script>
+</body>
+</html>
