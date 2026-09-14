@@ -1,0 +1,24 @@
+{
+  "preactCores": 1,
+  "packages": [
+    "@babel/runtime",
+    "@popperjs/core",
+    "@react-aria/ssr",
+    "@restart/hooks",
+    "@restart/ui",
+    "classnames",
+    "dequal",
+    "dom-helpers",
+    "htm",
+    "invariant",
+    "preact",
+    "prop-types",
+    "react-aria",
+    "react-bootstrap",
+    "react-lifecycles-compat",
+    "react-transition-group",
+    "uncontrollable",
+    "warning"
+  ],
+  "inputs": 268
+}

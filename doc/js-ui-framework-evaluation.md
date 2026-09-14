@@ -280,15 +280,21 @@ local `<Form>` wrapper over react-bootstrap's `validated` prop and
 `<Form.Control.Feedback>`, which map onto `validate()`/`setError()` directly.
 `TableMaint` (§3.5) needs that wrapper regardless, so it is not extra work.
 
-**One build trap, hit while measuring.** Bundling naively pulls **two copies of
-preact core** — `preact.mjs` via `htm/preact`, `preact.js` via `preact/compat` —
-so the hooks module registers its `options` hooks on a different instance than the
-one rendering, and the first render dies with `TypeError: Cannot read properties
-of undefined (reading 'context')` inside `useBootstrapPrefix`. The stack points
-nowhere near the cause. Fix is resolution config in the §4 esbuild pass
-(`--main-fields=module,main` alongside the `react`/`react-dom` aliases), and it
-wants a guard test in the new suite for the same reason
-`bundle_migration_test.dart` exists.
+**One build trap, hit while measuring — and narrower than it first looked.**
+Bundling can pull **two copies of preact core**, so the hooks module registers
+its `options` hooks on a different instance than the one rendering and the first
+render dies with `TypeError: Cannot read properties of undefined (reading
+'context')` inside `useBootstrapPrefix`. The stack points nowhere near the cause.
+
+Measured precisely afterwards: this happens under `--platform=node` and **not**
+on esbuild's default browser platform, where `react-bootstrap`-via-`preact/compat`
+and `htm/preact` both resolve to `preact.module.js`. So the shipping bundle was
+never at risk, and `--main-fields=module,main` — the first fix tried — neither
+causes nor cures it. The real rule is: **do not re-bundle the widget layer for
+node.** A test harness should import the built browser bundle, which is what
+`web/test/ui.test.js` does. `tool/build_js.sh` counts preact cores in esbuild's
+metafile and fails the build at anything but one, so the property is pinned
+rather than assumed.
 
 **The runner-up, and why it loses.** **Shoelace** is the only candidate that
 supplies *both* halves — `<sl-input label="Name">` with a real `.value` property
@@ -384,6 +390,27 @@ moment to adopt both:
   `data-bs-theme="dark"` attribute: ~3.9 MB lighter (§5), no reflow, and a real
   dark mode.
 
+  > **Corrected 2026-09-14, on the device.** *Custom properties alone do not
+  > retheme Bootstrap 5.3.* `.btn-primary` compiles to `--bs-btn-bg:#0d6efd` —
+  > a literal, not `var(--bs-primary)` — so overriding the palette tokens
+  > retints nothing a user can see. Built that way, all 18 themes fit in 66 KB
+  > and the aCelery theme's Save button stayed stock blue.
+  >
+  > What works is a **delta**: the rules where a Bootswatch build differs from
+  > stock Bootstrap, scoped under `[data-acelery-theme]` so they layer rather
+  > than replace. 30–80 KB per theme, **636 KB for all 18** against 4.1 MB, and
+  > the result is what Bootswatch actually renders rather than an approximation
+  > of it — so §9.6's "not pixel-identical" caveat is largely retired too.
+  > Bootswatch's webfonts are dropped: they fetch from Google Fonts, which an
+  > offline device cannot reach (C3), so they were only ever a failed request.
+  >
+  > `data-bs-theme` still carries the dark/light mode, and that part landed
+  > exactly as described. It also exposed a latent bug: `xbNavBar` pinned
+  > `data-bs-theme="light"` on itself, harmless while no theme was truly dark,
+  > and a light navbar over a dark page the moment one was.
+  >
+  > Net: **−3.2 MB, not −3.9 MB.** §5 updated.
+
 ### 3.5 Rebuild `xbTableMaint` — this is the product
 
 `xscript_crud.js` is aCelery's actual differentiator: declare fields and
@@ -478,17 +505,24 @@ green; it already guards this seam.
 
 Measured from this tree.
 
-| Item | Now | After | Δ |
-|---|---|---|---|
-| `css/bootstrap_themes/` (18 × 228 KB) | 4176 KB | ~250 KB | **−3.9 MB** — §3.4, CSS variables |
-| CodeMirror 4 → tree-shaken CM6 | 2600 KB | ~500 KB | **−2.1 MB** — §3.7 |
-| Dead `css/bootstrap.min.css` (referenced by nothing) | 228 KB | 0 | **−228 KB** |
-| Font Awesome 6, subset to icons used | 376 KB | ~60 KB | **−316 KB** |
-| Tempus Dominus | 136 KB | 0 | **−136 KB** — §3.9 |
-| `lazyload.js` | 13 KB | 0 | **−13 KB** — §3.2 |
-| xScript widget layer → Preact + htm + components | ~91 KB | ~50 KB | **−41 KB** |
-| Chart.js (added) | 0 | 203 KB | **+203 KB** |
-| **Total** | **7.7 MB** | **~1.2 MB** | **−6.5 MB** |
+| Item | Now | Projected | As built | Δ |
+|---|---|---|---|---|
+| `css/bootstrap_themes/` (18 × 228 KB) | 4176 KB | ~250 KB | **908 KB** (232 base + 676 deltas) | **−3.2 MB** — §3.4, *corrected* |
+| CodeMirror 4 → 6 modes, no addons/keymaps | 2600 KB | ~500 KB | **592 KB** ✅ 4a | **−2.0 MB** |
+| …→ tree-shaken CM6 | 592 KB | ~500 KB | pending 4d | — |
+| Dead `css/bootstrap.min.css` | 228 KB | 0 | **reinstated as the theme base** | 0 — §3.4 |
+| CodeMirror demo pages served to the LAN | 89 files | — | **0** ✅ 4a | included above |
+| Font Awesome 6, subset to icons used | 376 KB | ~60 KB | pending 4e | — |
+| Tempus Dominus | 136 KB | 0 | pending 4e | — — §3.9 |
+| `lazyload.js` | 13 KB | 0 | pending 4c.8 | — — §3.2 |
+| xScript widget layer → Preact + htm + react-bootstrap | ~91 KB | ~50 KB | **127 KB** (45 KB gz) ✅ 4c | **+36 KB** — §3.1a |
+| aCelery capability modules (added) | 0 | — | **60 KB** ✅ 4b | **+60 KB** |
+| Chart.js (added) | 0 | 203 KB | pending 4e | — |
+| **Total** | **7.7 MB** | **~1.2 MB** | **2.4 MB so far** | **−5.3 MB so far** |
+
+The zipped asset went 1.72 MB → **764 KB**. Phases 4c.8, 4d and 4e still have
+Tempus Dominus, Font Awesome, `lazyload.js` and the legacy `xscript*.js` to
+remove, against Chart.js and CM6 to add.
 
 The saving is in *expanded* size — install footprint, extraction time, and the
 IDE's first paint. The zipped asset shrinks much less, since CSS and JS compress
@@ -637,9 +671,20 @@ second defect that had nothing to do with it:
 
 **Phase 4c — the widget layer**
 6. Vendor Preact + htm; build the ~33 components the IDE needs, plus
-   `<Row>`/`<Col>` on the Bootstrap grid (§3.1, §3.4).
+   `<Row>`/`<Col>` on the Bootstrap grid (§3.1, §3.4). ✅ **done (2026-09-14).**
+   `web/src/ui/` → `acelery/ui.js`, 127 KB raw / 45 KB gzipped: Preact + htm +
+   react-bootstrap (§3.1a), plus the parts react-bootstrap has no equivalent of —
+   `<Form>` with `getFormData`/`validateForm` in one piece of state, labelled
+   `<Input>`/`<Select>`/`<TextArea>`/`<CheckBox>` that own their `for`/`id`
+   pairing, `<Panel>`, `<Row>`/`<Col>`, and validators as plain functions rather
+   than xScript's class hierarchy. 33 node tests run against the *built* bundle.
 7. `data-bs-theme` theming; drop 17 of 18 theme stylesheets (§3.4) — ~3.9 MB.
+   ✅ **done (2026-09-14)**, by a different mechanism than planned and for
+   −3.2 MB rather than −3.9 MB. See §3.4's correction: custom properties alone
+   retint nothing in Bootstrap 5.3, so each theme became a rule *delta* over one
+   stock Bootstrap. All 18 survive and are faithful rather than approximate.
 8. Import map + module loading in `launcher.html`; delete `lazyload.js` (§3.2).
+   **Next.**
 
 **Phase 4d — the product**
 9. `TableMaint` as a Preact component, with keyed rows (§3.5).
@@ -688,16 +733,17 @@ but note its ESM-only JS will need a shim wherever `bootstrap.Modal` /
    - every imperative `bootstrap.Modal` / `bootstrap.Offcanvas` call site must
      convert, or `bootstrap.bundle.min.js` cannot be dropped and the byte case
      evaporates;
-   - the esbuild pass needs consistent ESM resolution (`--main-fields=module,main`
-     alongside the `react`/`react-dom` aliases) or two copies of preact core get
-     bundled and the first render dies inside `useBootstrapPrefix`. This wants a
-     guard test from day one, per §6.
+   - the widget layer must not be re-bundled for `--platform=node`, or two
+     copies of preact core come in and the first render dies inside
+     `useBootstrapPrefix` (§3.1a). The browser build is safe; the build script
+     counts cores in esbuild's metafile and fails at anything but one.
    - `getFormData`/`validateForm` have no equivalent and stay a local `<Form>`
      wrapper over `validated` + `<Form.Control.Feedback>`.
-6. **How many themes survive?** **All 18**, resolving through `data-bs-theme`
-   and CSS variables (§3.4). Accepted trade: variable overrides are not
-   pixel-identical to hand-tuned Bootswatch builds, so some themes will be
-   approximations of their old selves. ~4.1 MB → ~250 KB.
+6. **How many themes survive?** **All 18** (§3.4). The accepted trade — that
+   variable overrides would be approximations of the hand-tuned builds — turned
+   out not to be the trade on offer: variables alone retint nothing, and the
+   delta approach that does work is faithful rather than approximate. The real
+   cost is bytes: **4.1 MB → 908 KB**, not the ~250 KB projected.
 
 ### Still open
 

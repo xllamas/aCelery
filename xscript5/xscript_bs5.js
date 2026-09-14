@@ -1005,7 +1005,12 @@ xbTabPane.prototype = new xSection();
 
 function xbNavBar(title,clss,lclss){
    xSection.call(this,"navbar navbar-expand-lg bg-body-tertiary " + (clss || ""));
-   this.node.setAttribute("data-bs-theme","light");
+   /* No data-bs-theme here. Pinning the navbar to "light" was harmless while
+      every theme was a self-contained stylesheet and none of them put the
+      document into Bootstrap's dark colour mode. Since §3.4 made dark mode
+      real, a pinned navbar stays light under Darkly, Cyborg, Slate and
+      Superhero while everything below it goes dark. Inheriting from <html> is
+      what bg-body-tertiary was always meant to do. */
 
    var cont = document.createElement("div");
    cont.className = "container-fluid";
@@ -1594,20 +1599,38 @@ function xbTheme(label,ct){
 
 xbTheme.prototype = new xbSelect();
 
+/* Themes that ask Bootstrap for its dark colour mode. */
+
+xbTheme.darkThemes = ["cyborg","darkly","slate","superhero"];
+
+/* A theme used to be a self-contained 228 KB Bootswatch build, swapped whole,
+   from a directory of 18 totalling 4.1 MB. It is now a delta over one stock
+   Bootstrap: the rules where that theme differs, 30-80 KB, scoped under a
+   data-acelery-theme attribute (§3.4, and tool/build_themes.mjs for why
+   CSS variables alone could not do this).
+
+   Same operation as acelery/ui.js's applyTheme(); both write the attribute the
+   delta stylesheets key off, so the two cannot drift. */
+
 xbTheme.prototype.setTheme = function(th){
-   var link = document.createElement("link");
-       link.id = "xbtheme";
-       link.type = "text/css";
-       link.rel = "stylesheet";
-       link.href = "/tools/css/bootstrap_themes/" + th.toLowerCase() + "/bootstrap.min.css";
-   var head = document.getElementsByTagName("head")[0];
-   var plink = document.getElementById("xbtheme");
-   if (plink)
-      head.removeChild(plink);
-   head.appendChild(link);
-   this.currTheme = th;
-   if (reqCssFiles.length > 0)
-      LazyLoad.css(reqCssFiles,function(){});
+   var theme = (th || "acelery").toLowerCase();
+   var root = document.documentElement;
+
+   var link = document.getElementById("xbtheme");
+   if (!link){
+      link = document.createElement("link");
+      link.id = "xbtheme";
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+   }
+   link.href = "/tools/css/themes/" + theme + ".css";
+
+   root.setAttribute("data-acelery-theme",theme);
+   root.setAttribute("data-bs-theme",
+      xbTheme.darkThemes.indexOf(theme) >= 0 ? "dark" : "light");
+
+   this.currTheme = theme;
+   return this;
 }
 
 /*  xbCarousel  */

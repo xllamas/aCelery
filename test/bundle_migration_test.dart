@@ -1,6 +1,7 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -77,7 +78,9 @@ void main() {
         'js/bootstrap.bundle.min.js',
         'js/tempus-dominus.min.js',
         'js/xscript_bs5.js',
-        'css/bootstrap_themes/default/bootstrap.min.css',
+        'css/bootstrap.min.css',
+        'css/themes/acelery.css',
+        'css/themes/_dark.css',
         'css/tempus-dominus.min.css',
         'fontawesome/css/all.min.css',
         'fontawesome/webfonts/fa-solid-900.woff2',
@@ -247,7 +250,9 @@ void main() {
   });
 
   group('every theme xbTheme offers resolves', () {
-    test('each listed theme has a stylesheet', () {
+    final themeDir = Directory('${tools.path}/css/themes');
+
+    test('each listed theme has a delta stylesheet', () {
       final lib = read(File('${tools.path}/js/xscript_bs5.js'));
       final block = lib.substring(
           lib.indexOf('function xbTheme'), lib.indexOf('this.currTheme'));
@@ -256,38 +261,88 @@ void main() {
           .map((m) => m.group(1)!)
           .toList();
 
-      expect(values, isNotEmpty);
-      // Paper and Readable were renamed upstream; the directories keep the old
-      // names so existing user apps still resolve.
+      expect(values, hasLength(18));
+      // Paper and Readable were renamed upstream (Materia, Litera); the old
+      // names are what xbTheme offers, so they are what must resolve.
       expect(values, containsAll(['acelery', 'default', 'paper', 'readable']));
 
       for (final theme in values) {
-        expect(
-          File('${tools.path}/css/bootstrap_themes/$theme/bootstrap.min.css')
-              .existsSync(),
-          isTrue,
-          reason: theme,
-        );
+        expect(File('${themeDir.path}/$theme.css').existsSync(), isTrue,
+            reason: theme);
       }
     });
 
-    test('the themes are Bootstrap 5, not Bootstrap 3', () {
-      final dir = Directory('${tools.path}/css/bootstrap_themes');
-      for (final theme in dir.listSync().whereType<Directory>()) {
-        final css = File('${theme.path}/bootstrap.min.css').readAsStringSync();
-        expect(css, contains('--bs-'), reason: theme.path);
-        expect(css, isNot(contains('.glyphicon{')), reason: theme.path);
+    test('a theme is a delta, not another whole Bootstrap', () {
+      // The point of §3.4: 18 × 228 KB became one base plus small overrides.
+      for (final css in themeDir.listSync().whereType<File>()) {
+        expect(css.lengthSync(), lessThan(120 * 1024), reason: css.path);
+        expect(css.readAsStringSync(), isNot(contains('.container-fluid')),
+            reason: '${css.path} redeclares Bootstrap itself');
+      }
+      final total = themeDir
+          .listSync()
+          .whereType<File>()
+          .fold<int>(0, (sum, f) => sum + f.lengthSync());
+      expect(total, lessThan(1024 * 1024),
+          reason: '$total bytes; 18 Bootswatch builds were 4.1 MB');
+    });
+
+    test('every rule in a theme is scoped to that theme', () {
+      // An unscoped rule would leak into every other theme.
+      final darkly = File('${themeDir.path}/darkly.css').readAsStringSync();
+      final body = darkly.substring(darkly.indexOf('*/') + 2);
+      for (final rule in body.split('\n').where((l) => l.contains('{'))) {
+        if (rule.trimLeft().startsWith('@')) continue;
+        expect(rule, contains('[data-acelery-theme="darkly"]'),
+            reason: rule.substring(0, rule.indexOf('{')));
       }
     });
 
-    test('the aCelery theme keeps its palette', () {
-      final css = File('${tools.path}/css/bootstrap_themes/acelery/'
-              'bootstrap.min.css')
-          .readAsStringSync();
-      // Carried over from the Bootstrap 3 theme it replaces.
-      expect(css, contains('#283b41')); // navbar
-      expect(css, contains('#586d72')); // primary
-      expect(css, contains('#86a0a4')); // brand text
+    test('no theme fetches a webfont it cannot reach', () {
+      // Bootswatch themes @import Google Fonts. aCelery is fully offline (C3),
+      // so those are stripped; a leftover is a guaranteed failed request.
+      for (final css in themeDir.listSync().whereType<File>()) {
+        final text = css.readAsStringSync();
+        expect(text, isNot(contains('@font-face')), reason: css.path);
+        expect(text, isNot(contains('@import')), reason: css.path);
+        expect(text, isNot(contains('url(')), reason: css.path);
+      }
+    });
+
+    test('the aCelery theme actually retints its components', () {
+      // The defect this design exists for: Bootstrap 5.3 compiles .btn-primary
+      // to --bs-btn-bg:#0d6efd, a literal, so overriding --bs-primary alone
+      // leaves the Save button stock blue. Verified on device.
+      final css = File('${themeDir.path}/acelery.css').readAsStringSync();
+      expect(css, contains('--bs-primary: #586d72'));
+      expect(css, contains('.btn-primary'));
+      expect(css, contains('--bs-btn-bg: #586d72'));
+    });
+
+    test('switching a theme swaps a delta, not a whole stylesheet', () {
+      // Both the legacy library and acelery/ui.js write the same attribute and
+      // point at the same directory, so they cannot drift apart.
+      final lib = read(File('${tools.path}/js/xscript_bs5.js'));
+      final setTheme = lib.substring(lib.indexOf('xbTheme.prototype.setTheme'));
+      final body = setTheme.substring(0, setTheme.indexOf('\n}'));
+      expect(body, contains('data-acelery-theme'));
+      expect(body, contains('data-bs-theme'));
+      expect(body, contains('/tools/css/themes/'));
+      expect(body, isNot(contains('bootstrap_themes')));
+
+      final ui = File('web/src/ui/theme.js').readAsStringSync();
+      expect(ui, contains('data-acelery-theme'));
+      expect(ui, contains('data-bs-theme'));
+      expect(ui, contains('/tools/css/themes/'));
+    });
+
+    test('every page carries a theme before first paint', () {
+      // Without it the page paints stock Bootstrap and then repaints themed.
+      for (final page in pages) {
+        final html = read(page);
+        expect(html, contains('data-acelery-theme='), reason: page.path);
+        expect(html, contains('id="xbtheme"'), reason: page.path);
+      }
     });
   });
 
@@ -357,9 +412,24 @@ void main() {
       expect(demos, isEmpty);
     });
 
-    test('the dead top-level bootstrap.min.css stays deleted', () {
-      // 228 KB referenced by nothing; the pages load a theme stylesheet.
-      expect(File('${tools.path}/css/bootstrap.min.css').existsSync(), isFalse);
+    test('the top-level bootstrap.min.css is the base, not a duplicate', () {
+      // It was dead weight in Phase 4a — 228 KB referenced by nothing, because
+      // every page linked a theme build instead. Phase 4c inverts that: the
+      // pages link stock Bootstrap once and themes.css layers custom properties
+      // over it (§3.4), so exactly one full Bootstrap ships.
+      final css = File('${tools.path}/css/bootstrap.min.css');
+      expect(css.existsSync(), isTrue);
+      expect(Directory('${tools.path}/css/bootstrap_themes').existsSync(),
+          isFalse,
+          reason: '18 × 228 KB of theme builds replaced by themes.css');
+
+      final fullBootstraps = Directory('${tools.path}/css')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.css'))
+          .where((f) => f.readAsStringSync().contains('.container-fluid'))
+          .length;
+      expect(fullBootstraps, 1, reason: 'more than one full Bootstrap shipped');
     });
 
     test('every theme the editor offers still resolves', () {
@@ -404,12 +474,17 @@ void main() {
       expect(stamp.existsSync(), isTrue,
           reason: 'no build stamp; run tool/build_js.sh');
 
-      final sources = Directory('web/src/acelery')
-          .listSync()
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.js'))
-          .toList()
-        ..sort((a, b) => a.path.compareTo(b.path));
+      // Same order tool/build_js.sh cats them in: acelery/ then ui/, each
+      // glob-sorted.
+      final sources = [
+        for (final dir in ['web/src/acelery', 'web/src/ui'])
+          ...(Directory(dir)
+              .listSync()
+              .whereType<File>()
+              .where((f) => f.path.endsWith('.js'))
+              .toList()
+            ..sort((a, b) => a.path.compareTo(b.path))),
+      ];
 
       final digest = sha256
           .convert(sources.expand((f) => f.readAsBytesSync()).toList())
@@ -480,6 +555,84 @@ void main() {
     });
   });
 
+  group('Phase 4c — the widget layer', () {
+    final ui = File('bundle/www/tools/js/acelery/ui.js');
+
+    test('the bundled widget layer ships', () {
+      expect(ui.existsSync(), isTrue, reason: 'run tool/build_js.sh');
+    });
+
+    test('exactly one copy of preact core is bundled', () {
+      // react-bootstrap resolves through preact/compat while htm/preact
+      // resolves preact directly. On esbuild's browser platform both land on
+      // preact.module.js; under --platform=node two copies come in, the hooks
+      // module registers its options on the instance that is not rendering, and
+      // the first render dies inside useBootstrapPrefix with a stack that points
+      // nowhere near the cause. Minified output cannot be grepped for this, so
+      // tool/build_js.sh reads esbuild's metafile, fails the build at anything
+      // but one, and records the count here.
+      final info = File('bundle/www/tools/js/acelery/.build-info.json');
+      expect(info.existsSync(), isTrue, reason: 'run tool/build_js.sh');
+
+      final decoded =
+          jsonDecode(info.readAsStringSync()) as Map<String, Object?>;
+      expect(decoded['preactCores'], 1);
+
+      // And the dependency set is the one §3.1a measured. A new name here means
+      // the byte budget below was measured against something else.
+      expect(decoded['packages'], contains('react-bootstrap'));
+      expect(decoded['packages'], contains('preact'));
+      expect(decoded['packages'], contains('htm'));
+      expect((decoded['packages']! as List), isNot(contains('react')),
+          reason: 'react itself must never be bundled; preact/compat stands in');
+    });
+
+    test('the widget layer renders to light DOM', () {
+      // The whole reason Lit was declined (§3.1): a global stylesheet does not
+      // pierce a shadow root, so Bootstrap's CSS would not reach the
+      // components. Nothing here may attach one.
+      final source = ui.readAsStringSync();
+      expect(source, isNot(contains('attachShadow')));
+      expect(source, isNot(contains('adoptedStyleSheets')));
+    });
+
+    test('the widget layer stays within its byte budget', () {
+      // §3.1a measured 127 KB raw / 45 KB gzipped for this stack. A jump means
+      // a dependency crept in; §5's weight table assumes it does not.
+      expect(ui.lengthSync(), lessThan(200 * 1024),
+          reason: '${ui.lengthSync()} bytes — §3.1a measured ~127 KB');
+    });
+
+    test('no sourcemap ships for the vendored bundle', () {
+      // ~700 KB of map for library internals nobody debugs into, on a bundle
+      // being shrunk to ~1.2 MB. The capability modules keep theirs.
+      expect(File('${ui.path}.map').existsSync(), isFalse);
+      expect(File('bundle/www/tools/js/acelery/sql.js.map').existsSync(), isTrue);
+    });
+
+    test('every theme xbTheme offered is still offered', () {
+      // Decision §9.6: all 18 survive, resolving through CSS variables.
+      final theme = File('web/src/ui/theme.js').readAsStringSync();
+      final listed = RegExp(r'"([a-z]+)"')
+          .allMatches(theme.substring(theme.indexOf('export const THEMES'),
+              theme.indexOf('/** Which of them')))
+          .map((m) => m.group(1)!)
+          .toSet();
+
+      final old = read(File('${tools.path}/js/xscript_bs5.js'));
+      final block = old.substring(
+          old.indexOf('function xbTheme'), old.indexOf('this.currTheme'));
+      final offered = RegExp(r'value:\s*"([a-z]+)"')
+          .allMatches(block)
+          .map((m) => m.group(1)!)
+          .toSet();
+
+      expect(offered, isNotEmpty);
+      expect(listed, containsAll(offered),
+          reason: 'a theme xbTheme offers is missing from THEMES');
+    });
+  });
+
   group('the built zip matches the source tree', () {
     test('assets/aCelery.zip is not stale', () {
       // tool/build_bundle.sh packs bundle/ into the asset; a forgotten rebuild
@@ -496,8 +649,12 @@ void main() {
       // Phase 4a's pruning has to reach the device, not just the source tree.
       expect(listing, isNot(contains('codemirror/keymap/')));
       expect(listing, isNot(contains('codemirror/addon/')));
-      expect(listing, isNot(contains('tools/css/bootstrap.min.css')));
+      // Phase 4c reinstated tools/css/bootstrap.min.css as the single base
+      // stylesheet; what must not come back is the 18-theme directory.
+      expect(listing, isNot(contains('tools/css/bootstrap_themes/')));
+      expect(listing, contains('aCelery/www/tools/css/themes/acelery.css'));
       expect(listing, contains('aCelery/www/tools/js/acelery/sql.js'));
+      expect(listing, contains('aCelery/www/tools/js/acelery/ui.js'));
     });
   });
 }
