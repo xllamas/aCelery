@@ -8,20 +8,20 @@
 <link rel="stylesheet" type="text/css" id="xbtheme" href="/tools/css/themes/acelery.css" />
 <link rel="stylesheet" type="text/css" href="/tools/fontawesome/css/all.min.css" />
 <link rel="stylesheet" type="text/css" href="/tools/css/tempus-dominus.min.css" />
-<link rel="stylesheet" href="/tools/codemirror/lib/codemirror.css">
 
 <script src="/tools/js/bootstrap.bundle.min.js" type="text/javascript"></script>
 <script src="/tools/js/tempus-dominus.min.js" type="text/javascript"></script>
 <script src="/tools/js/xscript.js" type="text/javascript" charset="utf-8"></script>
 <script src="/tools/js/xscript_bs5.js" type="text/javascript" charset="utf-8"></script>
 <script src="/tools/js/xscript_crud.js" type="text/javascript" charset="utf-8"></script>
-<script src="/tools/codemirror/lib/codemirror.js" type="text/javascript" charset="utf-8"></script>
-<script src="/tools/codemirror/mode/clike/clike.js" type="text/javascript" charset="utf-8"></script>
-<script src="/tools/codemirror/mode/xml/xml.js" type="text/javascript" charset="utf-8"></script>
-<script src="/tools/codemirror/mode/javascript/javascript.js" type="text/javascript" charset="utf-8"></script>
-<script src="/tools/codemirror/mode/css/css.js" type="text/javascript" charset="utf-8"></script>
-<script src="/tools/codemirror/mode/php/php.js" type="text/javascript" charset="utf-8"></script>
-<script src="/tools/codemirror/mode/htmlmixed/htmlmixed.js" type="text/javascript" charset="utf-8"></script>
+<!-- CodeMirror 6, tree-shaken to the languages the IDE opens (§3.7). It is an
+     ES module, so it is imported rather than script-tagged; the classic
+     scripts above still see it, because the import assigns to one global. -->
+<script type="module">
+import { createEditor } from "/tools/js/acelery/editor.js";
+window.aceleryEditor = { createEditor };
+window.dispatchEvent(new Event("acelery-editor-ready"));
+</script>
 <title>aCelery</title>
 </head>
 <body>
@@ -51,12 +51,20 @@ function addStylesheet(href,id){
    return link;
 }
 
-/* The editor theme is swapped in place rather than stacked: CodeMirror themes
-   are mutually exclusive, and the old code appended a new <link> on every
-   change, so a session that tried five themes carried all five. */
+/* CodeMirror 6 themes are extensions, not stylesheets, so this reconfigures the
+   live editor instead of swapping a <link>. An empty name means "follow the app
+   theme", which is what a user who just picked Darkly expects. */
 
-function setEditorTheme(name){
-   addStylesheet("/tools/codemirror/theme/" + name + ".css","cm-theme");
+function resolvedEditorTheme(){
+   if (editor_theme == "light" || editor_theme == "dark")
+      return editor_theme;
+   return document.documentElement.getAttribute("data-bs-theme") == "dark"
+      ? "dark" : "light";
+}
+
+function applyEditorTheme(){
+   if (editor)
+      editor.setTheme(resolvedEditorTheme());
 }
 var topNav = null;
 var navBar, projDd, fileDd;
@@ -240,7 +248,7 @@ function setEditorSize(){
       var nh = navBar.node.offsetHeight;
       editorCont.node.style.width = window.innerWidth + "px";
       editorCont.node.style.height = (window.innerHeight - nh) + "px";
-      editor.setSize(window.innerWidth,window.innerHeight -nh);
+      editor.setSize(window.innerWidth,window.innerHeight - nh);
    }
 }
 
@@ -329,31 +337,29 @@ function openFile(f){
    var content, ext, m;
    
    currentFile = f;
-   ext = f.substr((~-f.lastIndexOf(".") >>> 0) + 2);
-   if (ext == "js")
-      m = "text/javascript";
-   else
-   if (ext == "css")
-      m = "text/css";
-   else
-   if (ext == "php")
-      m = "application/x-httpd-php";
-   else
-      m = "text/html";
+   /* The language comes from the filename, which the editor works out itself. */
    tweakIdeMenu();
    file.open(f,path);
    content = file.read();
    file.close();
    editorCont = new xTextBox("","codemirror");
    ideLayout.replaceElement(editorCont,1,0);
-   editor = new CodeMirror(editorCont.node, {
-        lineNumbers: true,
-        mode: m,
-        value: content
-      });
-   if (editor_theme != "")
-      editor.setOption("theme",editor_theme);
-   editor.on("change",fileChangeListener);
+   if (editor)
+      editor.destroy();
+   if (!window.aceleryEditor){
+      /* A module script is deferred, so it runs after these classic ones. By
+         the time a user can ask for a file it has long since loaded; this says
+         so plainly rather than failing as "cannot read properties of
+         undefined" if that ever stops being true. */
+      xAlertDialog("aCelery IDE","The editor is still loading; try again.");
+      return;
+   }
+   editor = window.aceleryEditor.createEditor(editorCont.node,{
+      value: content,
+      filename: f,
+      theme: resolvedEditorTheme(),
+      onChange: fileChangeListener
+   });
    setEditorSize();
    window.onresize = setEditorSize;
 }
@@ -897,37 +903,14 @@ function dbManMenu(){
 /*               Configure               */
 
 function aCeleryConfig(){
-   var edThemes = [{label: "3024 Day", value: "3024-day"},
-                   {label: "3024 Nigth", value: "3024-night"},
-                   {label: "Ambiance", value: "ambiance"},
-                   {label: "Ambiance Mobile", value: "ambiance-mobile"},
-                   {label: "Base 16 Dark", value: "base16-dark"},
-                   {label: "Base 16 Light", value: "base16-light"},
-                   {label: "Blackboard", value: "blackboard"},
-                   {label: "Cobalt", value: "cobalt"},
-                   {label: "Eclipse", value: "eclipse"},
-                   {label: "Elegant", value: "elegant"},
-                   {label: "Erlang Dark", value: "erlang-dark"},
-                   {label: "Default", value: ""},
-                   {label: "Lesser Dark", value: "lesser-dark"},
-                   {label: "Mbo", value: "mbo"},
-                   {label: "Mdn Like", value: "mdn-like"},
-                   {label: "Midnight", value: "midnight"},
-                   {label: "Monokai", value: "monokai"},
-                   {label: "Neat", value: "neat"},
-                   {label: "Neo", value: "neo"},
-                   {label: "Night", value: "night"},
-                   {label: "Paraiso Dark", value: "paraiso-dark"},
-                   {label: "Paraiso Light", value: "paraiso-light"},
-                   {label: "Pastel On Dark", value: "pastel-on-dark"},
-                   {label: "Rubyblue", value: "rubyblue"},
-                   {label: "Solarized", value: "solarized"},
-                   {label: "The Matrix", value: "the-matrix"},
-                   {label: "Tomorrow Night Eighties", value: "tomorrow-night-eighties"},
-                   {label: "Twilight", value: "twilight"},
-                   {label: "Vibrant Ink", value: "vibrant-ink"},
-                   {label: "Xq Dark", value: "xq-dark"},
-                   {label: "Xq Light", value: "xq-light"}];
+   /* CodeMirror 6 expresses a theme as an extension rather than a stylesheet,
+      so CM4's 30 theme CSS files do not carry over (§3.7). Light and dark are
+      what ship; "Follow app theme" tracks whichever aCelery theme is active,
+      which is what a user picking Darkly almost always wants.
+      doc/js-ui-framework-evaluation.md §9.9 records the reduction. */
+   var edThemes = [{label: "Follow app theme", value: ""},
+                   {label: "Light", value: "light"},
+                   {label: "Dark", value: "dark"}];
                   
    var acSel = new xbTheme("aCelery Theme",acelery_theme);
    var edSel = new xbSelect("Editor Theme","editortheme")
@@ -970,7 +953,7 @@ function aCeleryConfig(){
       configDb.closeDB();
       acelery_theme = acSel.getValue();
       editor_theme = edSel.getValue();
-      setEditorTheme(editor_theme);
+      applyEditorTheme(editor_theme);
       xAlertDialog("aCelery Configuration","Configuration Saved");
    }
 }
@@ -1045,7 +1028,7 @@ function aCeleryInit(){
       else
       if (row.cfg_key == "editortheme"){
          editor_theme = row.cfg_value;
-         setEditorTheme(editor_theme);
+         applyEditorTheme(editor_theme);
       }   
    }
 }

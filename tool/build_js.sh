@@ -97,14 +97,25 @@ NODE
 
 rm -f "$OUT/.meta.json"
 
-# 3. Themes: all 18 as CSS custom properties on one stylesheet (§3.4), from the
+# 3. The editor: CodeMirror 6, tree-shaken to the six languages the IDE opens
+#    (§3.7). Its own bundle, so a page that does not edit code does not pay
+#    for it -- launcher.html and errorlog.html never load this.
+(cd web && node_modules/.bin/esbuild src/editor/index.js \
+  --bundle \
+  --format=esm \
+  --target=es2022 \
+  --minify \
+  --outfile="../$OUT/editor.js" \
+  --log-level=warning)
+
+# 4. Themes: all 18 as CSS custom properties on one stylesheet (§3.4), from the
 #    bootswatch npm package, so 4.1 MB of theme builds lives in neither the repo
 #    nor the install.
 node tool/build_themes.mjs
 
 # A stamp over the inputs, so a test can tell that the committed output was
 # built from the sources next to it without needing node to rebuild and diff.
-cat web/src/acelery/*.js web/src/ui/*.js | shasum -a 256 | cut -d' ' -f1 \
+cat web/src/acelery/*.js web/src/ui/*.js web/src/editor/*.js | shasum -a 256 | cut -d' ' -f1 \
   > "$OUT/.sources.sha256"
 
 echo "$OUT: $(ls "$OUT"/*.js | wc -l | tr -d ' ') modules, $(du -sh "$OUT" | cut -f1)"

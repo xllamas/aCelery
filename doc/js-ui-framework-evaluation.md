@@ -509,7 +509,7 @@ Measured from this tree.
 |---|---|---|---|---|
 | `css/bootstrap_themes/` (18 × 228 KB) | 4176 KB | ~250 KB | **908 KB** (232 base + 676 deltas) | **−3.2 MB** — §3.4, *corrected* |
 | CodeMirror 4 → 6 modes, no addons/keymaps | 2600 KB | ~500 KB | **592 KB** ✅ 4a | **−2.0 MB** |
-| …→ tree-shaken CM6 | 592 KB | ~500 KB | pending 4d | — |
+| …→ tree-shaken CM6 | 592 KB | ~500 KB | **566 KB** ✅ 4d | ~0 — see below |
 | Dead `css/bootstrap.min.css` | 228 KB | 0 | **reinstated as the theme base** | 0 — §3.4 |
 | CodeMirror demo pages served to the LAN | 89 files | — | **0** ✅ 4a | included above |
 | Font Awesome 6, subset to icons used | 376 KB | ~60 KB | pending 4e | — |
@@ -519,6 +519,15 @@ Measured from this tree.
 | aCelery capability modules (added) | 0 | — | **60 KB** ✅ 4b | **+60 KB** |
 | Chart.js (added) | 0 | 203 KB | pending 4e | — |
 | **Total** | **7.7 MB** | **~1.2 MB** | **2.4 MB so far** | **−5.3 MB so far** |
+
+**On CodeMirror 6's size.** §3.7 projected 400–500 KB raw. The measured bundle
+is **566 KB raw / 192 KB gzipped** with four languages — JavaScript, CSS, HTML
+and XML; PHP and Java are 133 KB more and were dropped (§9.8). So against the
+*already pruned* CM4 it replaces, the swap is roughly byte-neutral. What it buys
+is not bytes: search, autocompletion, code folding, bracket matching, undo
+history and line wrapping, none of which CM4 shipped in a working state — Phase
+4a deleted all 51 of its addons precisely because nothing referenced them. The
+2.0 MB saving against the *original* CM4 tree was banked in 4a, not here.
 
 The zipped asset went 1.72 MB → **764 KB**. Phases 4c.8, 4d and 4e still have
 Tempus Dominus, Font Awesome, `lazyload.js` and the legacy `xscript*.js` to
@@ -721,8 +730,16 @@ second defect that had nothing to do with it:
    tables, every field type, the list/search flags, the validator model and all
    seven pre/post hooks. Nothing is demolished to redraw it, every statement is
    parameterised, and the database calls are async.
-10. Rewrite the IDE on the new stack; CodeMirror 6 (§3.7). **Next — the largest
-    single item in the plan.**
+10. Rewrite the IDE on the new stack; CodeMirror 6 (§3.7). **Split in two.**
+    - **CodeMirror 6 ✅ done (2026-09-14).** The editor is swapped inside the
+      existing IDE first, so the editor migration and the IDE rewrite stay
+      separate pieces of work — the IDE used exactly five things from CM4
+      (construct, `setOption("theme")`, `on("change")`, `getValue`, `setSize`)
+      and gets the same five back from `acelery/editor.js`. CM4's whole
+      vendored tree is gone, and with it the last classic `<script>` tags in
+      the IDE.
+    - **The IDE shell — next.** 1,024 lines of `system/index.html`: project
+      manager, file manager, DB manager, editor host, config.
 11. Rewrite the Example app — it is the reference documentation for authors.
     ✅ **done (2026-09-14).** One file on the new API, demonstrating CRUD,
     linked tables, tabs, forms with validation, a responsive `<Row>`/`<Col>`
@@ -795,9 +812,23 @@ but note its ESM-only JS will need a shim wherever `bootstrap.Modal` /
 
 ### Still open
 
-7. **Native date pickers or Tempus Dominus?** Better on phones, 136 KB lighter,
+7. **Editor themes: is Light/Dark/follow enough?** CodeMirror 6 expresses a
+   theme as an extension rather than a stylesheet, so CM4's 30 theme CSS files
+   do not carry over — they are not convertible, they are a different mechanism.
+   What ships is Light, Dark (`@codemirror/theme-one-dark`) and "Follow app
+   theme", which is the default because a light editor inside Darkly is the
+   wrong answer. **This is a reduction from 30 to 3**, and the one place Phase 4
+   removes a user-facing choice rather than reimplementing it. Each additional
+   theme is ~40 lines of `EditorView.theme` plus a `HighlightStyle`; the
+   question is whether any are worth writing.
+8. **PHP and Java highlighting: wanted?** Their Lezer grammars are 133 KB of a
+   566 KB editor bundle, and the IDE's New File dialog offers `.js` and `.css`
+   only — CM4 carried `php` and `clike` because its mode directory shipped all
+   84 modes. Dropped for now; a `.php` file opens with HTML highlighting.
+   Restoring either is one import and one entry in `LANGUAGES`.
+9. **Native date pickers or Tempus Dominus?** Better on phones, 136 KB lighter,
    thinner on desktop. Needs an iOS WKWebView check. Decidable at Phase 4e.
-8. **Does the threat model include untrusted app data?** Imported projects,
+10. **Does the threat model include untrusted app data?** Imported projects,
    `xHTTP` responses, and AI-authored apps all move §7.4 and §3.3's parameterised
    queries from housekeeping to prerequisite. Phase 4b shipped the parameterised
    routes regardless, so this now only governs how hard §7.4's escaping work is

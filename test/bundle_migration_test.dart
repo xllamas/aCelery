@@ -375,41 +375,16 @@ void main() {
     // ~2 MB back. These pin what was removed and why.
     final cm = Directory('${tools.path}/codemirror');
 
-    test('the unreferenced CodeMirror trees are gone', () {
-      // 51 addons and 228 KB of keymaps, none referenced anywhere in bundle/.
-      expect(Directory('${cm.path}/addon').existsSync(), isFalse);
-      expect(Directory('${cm.path}/keymap').existsSync(), isFalse);
-    });
-
-    test('only the six modes the IDE loads are shipped', () {
-      final modes = Directory('${cm.path}/mode')
-          .listSync()
-          .whereType<Directory>()
-          .map((d) => d.path.split('/').last)
-          .toSet();
-      expect(modes, {'clike', 'css', 'htmlmixed', 'javascript', 'php', 'xml'});
-    });
-
-    test('every mode the IDE loads is actually present', () {
-      // htmlmixed pulls xml/javascript/css, php pulls clike/htmlmixed, so the
-      // six are closed under their own requires.
-      final html = read(pages.first);
-      for (final m in RegExp(r'codemirror/mode/([a-z]+)/')
-          .allMatches(html)
-          .map((m) => m.group(1)!)) {
-        expect(File('${cm.path}/mode/$m/$m.js').existsSync(), isTrue,
-            reason: m);
+    test('CodeMirror 4 is gone entirely', () {
+      // Phase 4a cut it from 2.6 MB to 592 KB by deleting the 78 unreferenced
+      // modes, 51 addons, 228 KB of keymaps and 89 demo pages. Phase 4d
+      // replaces what was left (§3.7), so the whole vendored tree goes — and
+      // with it the last classic <script> tags in the IDE.
+      expect(Directory('${tools.path}/codemirror').existsSync(), isFalse);
+      for (final page in pages) {
+        expect(read(page), isNot(contains('tools/codemirror')),
+            reason: page.path);
       }
-    });
-
-    test('no vendored demo pages are served to the LAN', () {
-      // CodeMirror ships an index.html per mode; the embedded server exposed
-      // all 89 of them on the network for no benefit.
-      final demos = cm
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.html'));
-      expect(demos, isEmpty);
     });
 
     test('the top-level bootstrap.min.css is the base, not a duplicate', () {
@@ -432,20 +407,6 @@ void main() {
       expect(fullBootstraps, 1, reason: 'more than one full Bootstrap shipped');
     });
 
-    test('every theme the editor offers still resolves', () {
-      final html = read(pages.first);
-      final block = html.substring(
-          html.indexOf('var edThemes'), html.indexOf('var acSel'));
-      final values = RegExp(r'value: "([a-z0-9-]+)"')
-          .allMatches(block)
-          .map((m) => m.group(1)!)
-          .toList();
-      expect(values, isNotEmpty);
-      for (final theme in values) {
-        expect(File('${cm.path}/theme/$theme.css').existsSync(), isTrue,
-            reason: theme);
-      }
-    });
   });
 
   group('Phase 4b — the async bridge', () {
@@ -477,7 +438,7 @@ void main() {
       // Same order tool/build_js.sh cats them in: acelery/ then ui/, each
       // glob-sorted.
       final sources = [
-        for (final dir in ['web/src/acelery', 'web/src/ui'])
+        for (final dir in ['web/src/acelery', 'web/src/ui', 'web/src/editor'])
           ...(Directory(dir)
               .listSync()
               .whereType<File>()
@@ -710,6 +671,90 @@ void main() {
     });
   });
 
+  group('Phase 4d — CodeMirror 6', () {
+    final editor = File('bundle/www/tools/js/acelery/editor.js');
+
+    test('the editor bundle ships', () {
+      expect(editor.existsSync(), isTrue, reason: 'run tool/build_js.sh');
+    });
+
+    test('only the IDE loads it', () {
+      // launcher.html and errorlog.html never edit code, so they must not pay
+      // for an editor — which is why it is its own bundle, not part of ui.js.
+      expect(read(pages.first), contains('acelery/editor.js'));
+      for (final page in pages.sublist(1)) {
+        expect(read(page), isNot(contains('editor.js')), reason: page.path);
+      }
+    });
+
+    test('the widget layer does not drag the editor in', () {
+      final ui = File('bundle/www/tools/js/acelery/ui.js').readAsStringSync();
+      expect(ui, isNot(contains('@codemirror')));
+      expect(ui, isNot(contains('cm-scroller')));
+    });
+
+    test('it carries only the languages an app is written in', () {
+      // The IDE's New File dialog offers .js and .css; CM4 shipped php and
+      // clike because its mode directory shipped all 84. Their Lezer grammars
+      // are 133 KB, so they are not carried (§3.7).
+      final source = File('web/src/editor/index.js').readAsStringSync();
+      for (final wanted in ['lang-javascript', 'lang-css', 'lang-html', 'lang-xml']) {
+        expect(source, contains(wanted), reason: wanted);
+      }
+      // "lang-java" is a substring of "lang-javascript", so match the import.
+      for (final dropped in ['lang-php"', 'lang-java"']) {
+        expect(source, isNot(contains(dropped)), reason: dropped);
+      }
+    });
+
+    test('the editor stays within its byte budget', () {
+      // §3.7 projected 400-500 KB raw for a tree-shaken CM6. Four languages
+      // rather than six lands at ~566 KB — roughly byte-neutral against the
+      // already-pruned CM4 it replaces, while adding search, autocomplete,
+      // folding, bracket matching and undo history, none of which CM4 shipped
+      // in a working state.
+      expect(editor.lengthSync(), lessThan(650 * 1024),
+          reason: '${editor.lengthSync()} bytes');
+    });
+
+    test('the IDE drives the editor through the small API it always used', () {
+      // CM4 gave the IDE five things. Keeping the same five is what lets the
+      // editor migration and the IDE rewrite stay separate pieces of work.
+      final ide = read(pages.first);
+      for (final call in [
+        'createEditor(',
+        '.getValue()',
+        '.setSize(',
+        '.setTheme(',
+        'onChange:',
+      ]) {
+        expect(ide, contains(call), reason: call);
+      }
+      expect(ide, isNot(contains('new CodeMirror')));
+      expect(ide, isNot(contains('setOption')));
+    });
+
+    test('the editor theme follows the app theme unless overridden', () {
+      // CM6 themes are extensions, not the 30 stylesheets CM4 shipped, so the
+      // list is Light / Dark / follow (§9.9). Following is the default because
+      // a light editor inside Darkly is the wrong answer.
+      final ide = read(pages.first);
+      expect(ide, contains('Follow app theme'));
+      expect(ide, contains('resolvedEditorTheme'));
+      expect(ide, contains("data-bs-theme"));
+
+      final source = File('web/src/editor/index.js').readAsStringSync();
+      expect(source, contains('oneDark'));
+    });
+
+    test('Tab indents rather than moving focus', () {
+      // On a phone there is nowhere for focus to go, and an editor that cannot
+      // indent is not an editor.
+      expect(File('web/src/editor/index.js').readAsStringSync(),
+          contains('indentWithTab'));
+    });
+  });
+
   group('the built zip matches the source tree', () {
     test('assets/aCelery.zip is not stale', () {
       // tool/build_bundle.sh packs bundle/ into the asset; a forgotten rebuild
@@ -725,8 +770,8 @@ void main() {
       expect(listing, isNot(contains('xscript_bootstrap.js')));
       expect(listing, isNot(contains('js/lazyload.js')));
       // Phase 4a's pruning has to reach the device, not just the source tree.
-      expect(listing, isNot(contains('codemirror/keymap/')));
-      expect(listing, isNot(contains('codemirror/addon/')));
+      expect(listing, isNot(contains('tools/codemirror/')));
+      expect(listing, contains('aCelery/www/tools/js/acelery/editor.js'));
       // Phase 4c reinstated tools/css/bootstrap.min.css as the single base
       // stylesheet; what must not come back is the 18-theme directory.
       expect(listing, isNot(contains('tools/css/bootstrap_themes/')));
