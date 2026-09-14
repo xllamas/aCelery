@@ -16,7 +16,7 @@ class ACeleryRuntime {
 
   /// Bump when `assets/aCelery.zip` changes, so installed devices refresh the
   /// shipped files on their next launch. User content is never touched.
-  static const String bundleVersion = '1.3.1+navbar-overlay';
+  static const String bundleVersion = '1.4.0+editor-themes';
 
   final ACeleryPaths paths;
   final ACeleryServer server;

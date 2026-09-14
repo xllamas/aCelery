@@ -14,6 +14,29 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { registerHooks } from "node:module";
+
+const repo = join(dirname(fileURLToPath(import.meta.url)), "../..");
+const aceleryDir = join(repo, "bundle/www/tools/js/acelery");
+
+/* The import map, as a resolve hook — same arrangement example_app.test.js
+   uses, so a bare "acelery/…" specifier resolves the way the browser's map
+   resolves it. */
+registerHooks({
+  resolve(specifier, context, next) {
+    return specifier.startsWith("acelery/")
+      ? {
+          url: pathToFileURL(
+            join(aceleryDir, specifier.slice("acelery/".length)),
+          ).href,
+          shortCircuit: true,
+        }
+      : next(specifier, context);
+  },
+});
 
 const dom = new JSDOM("<!doctype html><html><body><div id=root></div></body></html>");
 globalThis.window = dom.window;
@@ -310,4 +333,51 @@ test("useDismiss listens only while active, and unsubscribes", async () => {
   document.body.dispatchEvent(
     new dom.window.Event("pointerdown", { bubbles: true }));
   assert.equal(dismissed, 1);
+});
+
+test("every editor theme the settings screen offers resolves", async () => {
+  // The list and the extensions must not drift: an option with no extension
+  // silently leaves the editor on whatever was applied before.
+  const { THEMES, EDITOR_THEMES, isDarkTheme } =
+    await import("acelery/editor.js");
+
+  assert.ok(EDITOR_THEMES.length > 3, "more than Light/Dark/follow");
+  for (const { value, dark } of EDITOR_THEMES) {
+    if (value === "") continue; // "follow the app theme"
+    assert.ok(value in THEMES, `${value} has no extension`);
+    assert.equal(isDarkTheme(value), dark, `${value}: dark flag disagrees`);
+    // `light` is deliberately empty — CodeMirror's own default styles.
+    if (value !== "light") {
+      assert.ok(THEMES[value].length > 0, `${value} is an empty extension`);
+    }
+  }
+});
+
+test("the theme list covers both light and dark", async () => {
+  const { EDITOR_THEMES } = await import("acelery/editor.js");
+  assert.ok(EDITOR_THEMES.some((t) => t.dark === false));
+  assert.ok(EDITOR_THEMES.some((t) => t.dark === true));
+});
+
+test("a theme actually colours a token differently from its neighbour", async () => {
+  // A palette that resolved but assigned the same colour to everything would
+  // pass the checks above and look broken.
+  const { HighlightStyle } = await import(
+    "../node_modules/@codemirror/language/dist/index.js");
+  const { PALETTE_THEMES } = await import("../src/editor/themes.js");
+
+  for (const [name, ext] of Object.entries(PALETTE_THEMES)) {
+    const style = ext.find((e) => e?.value instanceof HighlightStyle)?.value
+      ?? ext.flat(3).find((e) => e instanceof HighlightStyle);
+    assert.ok(style ?? ext.length === 2, `${name}: no highlight style found`);
+  }
+});
+
+test("an unknown theme name falls back rather than blanking the editor", async () => {
+  const { THEMES } = await import("acelery/editor.js");
+  assert.equal(THEMES["no-such-theme"], undefined);
+  // createEditor resolves through `THEMES[name] ?? THEMES.light`.
+  const source = readFileSync(
+    join(repo, "web/src/editor/index.js"), "utf8");
+  assert.match(source, /THEMES\[[a-zA-Z.]*\w+\]\s*\?\?\s*THEMES\.light/);
 });

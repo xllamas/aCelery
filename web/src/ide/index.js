@@ -21,6 +21,10 @@ import {
 import * as file from "acelery/file.js";
 import { openDB } from "acelery/sql.js";
 import { runApp } from "acelery/export.js";
+/* The theme list comes from the editor module rather than a second copy here,
+   so adding a palette is the whole of adding a theme. Resolved through the
+   import map at runtime; ide.js is bundled with acelery/* left external. */
+import { EDITOR_THEMES, isDarkTheme } from "acelery/editor.js";
 
 import { IdeNavbar, useNotice } from "./chrome.js";
 import { IdeScreen } from "./ide_screen.js";
@@ -187,12 +191,11 @@ function ConfigScreen({ settings, onChange, onExit }) {
       <${Panel} title="aCelery Configuration">
         <${ThemeSelect} label="aCelery Theme" />
         <${Select} label="Editor Theme" value=${editorTheme}
-          onChange=${setEditorTheme}
-          options=${[
-            { label: "Follow app theme", value: "" },
-            { label: "Light", value: "light" },
-            { label: "Dark", value: "dark" },
-          ]} />
+          onChange=${setEditorTheme} options=${EDITOR_THEMES}
+          help=${editorTheme
+            ? `${isDarkTheme(editorTheme) ? "A dark" : "A light"} scheme, ` +
+              "regardless of the aCelery theme."
+            : "Tracks whichever aCelery theme is active."} />
         <${ButtonGroup}>
           <${Button} variant="primary" onClick=${save}>Save<//>
           <${Button} variant="secondary" onClick=${onExit}>Exit<//>
@@ -219,10 +222,13 @@ function Shell() {
     );
   }, []);
 
-  /** "" means follow the app theme, which is what a user picking Darkly wants. */
+  /**
+   * "" means follow the aCelery theme, which is what a user who has just
+   * picked Darkly wants; anything else is a scheme they chose deliberately.
+   */
   const editorTheme = useCallback(() => {
     const chosen = settings?.editortheme;
-    if (chosen === "light" || chosen === "dark") return chosen;
+    if (chosen && EDITOR_THEMES.some((t) => t.value === chosen)) return chosen;
     return isDark() ? "dark" : "light";
   }, [settings])();
 

@@ -29,6 +29,8 @@ import { bracketMatching, foldGutter, foldKeymap, indentOnInput,
          syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import { oneDark } from "@codemirror/theme-one-dark";
 
+import { PALETTE_THEMES, DARK_THEMES } from "./themes.js";
+
 import { javascript } from "@codemirror/lang-javascript";
 import { css } from "@codemirror/lang-css";
 import { html as htmlLang } from "@codemirror/lang-html";
@@ -67,11 +69,44 @@ export function languageFor(nameOrExt) {
   return factory ? factory() : htmlLang();
 }
 
-/** The editor themes on offer. */
+/**
+ * The editor themes on offer.
+ *
+ * `light` is CodeMirror's own default, which is why it is empty: with no theme
+ * extension the base styles and `defaultHighlightStyle` apply. `dark` is
+ * One Dark, the scheme CM6 ships. The rest are palettes in ./themes.js.
+ */
 export const THEMES = {
   light: [],
   dark: [oneDark],
+  ...PALETTE_THEMES,
 };
+
+/**
+ * The list a settings screen should offer, in the order it should offer it.
+ *
+ * Exported so the IDE does not keep its own copy: adding a palette here is the
+ * whole of adding a theme, rather than a palette plus a forgotten `<option>`.
+ * An empty value means "follow the aCelery theme".
+ */
+export const EDITOR_THEMES = [
+  { value: "", label: "Follow app theme", dark: null },
+  { value: "light", label: "Light", dark: false },
+  { value: "github", label: "GitHub", dark: false },
+  { value: "eclipse", label: "Eclipse", dark: false },
+  { value: "solarized-light", label: "Solarized Light", dark: false },
+  { value: "dark", label: "One Dark", dark: true },
+  { value: "dracula", label: "Dracula", dark: true },
+  { value: "monokai", label: "Monokai", dark: true },
+  { value: "nord", label: "Nord", dark: true },
+  { value: "gruvbox-dark", label: "Gruvbox Dark", dark: true },
+  { value: "solarized-dark", label: "Solarized Dark", dark: true },
+];
+
+/** Whether a named theme is a dark one. */
+export function isDarkTheme(name) {
+  return name === "dark" || DARK_THEMES.has(name);
+}
 
 /**
  * Sizing is a theme extension rather than a `setSize` call, because CM6 has no

@@ -797,16 +797,62 @@ void main() {
     });
 
     test('the editor theme follows the app theme unless overridden', () {
-      // CM6 themes are extensions, not the 30 stylesheets CM4 shipped, so the
-      // list is Light / Dark / follow (§9.9). Following is the default because
-      // a light editor inside Darkly is the wrong answer.
+      // CM6 themes are extensions, not the 30 stylesheets CM4 shipped. What
+      // ships is a set of palettes plus "follow", which is the default because
+      // a light editor inside Darkly is the wrong answer (§9.7).
+      // The list lives in the editor module; the shell resolves "" against the
+      // app theme's light/dark mode.
+      final editor = File('web/src/editor/index.js').readAsStringSync();
+      expect(editor, contains('Follow app theme'));
+
       final shell = File('web/src/ide/index.js').readAsStringSync();
-      expect(shell, contains('Follow app theme'));
-      // "" means follow, resolved through the app theme's light/dark mode.
       expect(shell, contains('isDark()'));
 
       final source = File('web/src/editor/index.js').readAsStringSync();
       expect(source, contains('oneDark'));
+    });
+
+    test('the settings screen offers more than light and dark', () {
+      // §9.7 was the one place Phase 4 removed a user-facing choice: CM4's 30
+      // theme stylesheets do not convert, so 4d shipped three options while
+      // the question of whether more were wanted stayed open. This is the
+      // answer, and it must not quietly shrink back.
+      final editor = File('web/src/editor/index.js').readAsStringSync();
+      final offered = RegExp(r'\{ value: "([a-z-]*)", label:')
+          .allMatches(editor)
+          .map((m) => m.group(1)!)
+          .toList();
+      expect(offered, contains(''), reason: '"follow the app theme"');
+      expect(offered.where((v) => v.isNotEmpty).length, greaterThan(6));
+    });
+
+    test('the IDE does not keep its own copy of the theme list', () {
+      // Two lists means adding a palette and forgetting the <option>, which
+      // reads as a theme that silently does nothing.
+      final shell = File('web/src/ide/index.js').readAsStringSync();
+      expect(shell, contains('EDITOR_THEMES'));
+      expect(shell, isNot(contains('label: "Monokai"')),
+          reason: 'the list belongs to acelery/editor.js');
+    });
+
+    test('every palette defines a full set of colours', () {
+      // A palette missing a key renders that token in the default colour,
+      // which on a dark background can be invisible rather than merely wrong.
+      final themes = File('web/src/editor/themes.js').readAsStringSync();
+      final blocks = RegExp(r'\n  "?[a-z-]+"?: \{\n    dark:.*?\n  \},',
+              dotAll: true)
+          .allMatches(themes);
+      expect(blocks, isNotEmpty);
+      for (final block in blocks) {
+        for (final key in [
+          'bg', 'fg', 'caret', 'selection', 'gutterBg', 'gutterFg',
+          'activeLine', 'comment', 'keyword', 'string', 'number', 'name',
+          'type', 'operator', 'fn',
+        ]) {
+          expect(block.group(0), contains('$key:'),
+              reason: '$key missing from ${block.group(0)!.split(":").first}');
+        }
+      }
     });
 
     test('Tab indents rather than moving focus', () {

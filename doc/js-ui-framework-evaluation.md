@@ -509,7 +509,7 @@ Measured from this tree.
 |---|---|---|---|---|
 | `css/bootstrap_themes/` (18 × 228 KB) | 4176 KB | ~250 KB | **908 KB** (232 base + 676 deltas) | **−3.2 MB** — §3.4, *corrected* |
 | CodeMirror 4 → 6 modes, no addons/keymaps | 2600 KB | ~500 KB | **592 KB** ✅ 4a | **−2.0 MB** |
-| …→ tree-shaken CM6 | 592 KB | ~500 KB | **566 KB** ✅ 4d | ~0 — see below |
+| …→ tree-shaken CM6 | 592 KB | ~500 KB | **571 KB** ✅ 4d | ~0 — see below |
 | Dead `css/bootstrap.min.css` | 228 KB | 0 | **reinstated as the theme base** | 0 — §3.4 |
 | CodeMirror demo pages served to the LAN | 89 files | — | **0** ✅ 4a | included above |
 | Font Awesome 6, subset to icons used | 372 KB | ~60 KB | **2.5 KB** ✅ 4e | **−370 KB** |
@@ -521,7 +521,7 @@ Measured from this tree.
 | **Total** | **7.7 MB** | **~1.2 MB** | **2.1 MB** | **−5.6 MB** |
 
 **On CodeMirror 6's size.** §3.7 projected 400–500 KB raw. The measured bundle
-is **566 KB raw / 192 KB gzipped** with four languages — JavaScript, CSS, HTML
+is **571 KB raw / 194 KB gzipped** with four languages and ten colour schemes — JavaScript, CSS, HTML
 and XML; PHP and Java are 133 KB more and were dropped (§9.8). So against the
 *already pruned* CM4 it replaces, the swap is roughly byte-neutral. What it buys
 is not bytes: search, autocompletion, code folding, bracket matching, undo
@@ -737,7 +737,8 @@ second defect that had nothing to do with it:
    seven pre/post hooks. Nothing is demolished to redraw it, every statement is
    parameterised, and the database calls are async.
 10. Rewrite the IDE on the new stack; CodeMirror 6 (§3.7). **Split in two.**
-    - **CodeMirror 6 ✅ done (2026-09-14).** The editor is swapped inside the
+    - **CodeMirror 6 ✅ done (2026-09-14).** Ten colour schemes plus "follow
+      the app theme" (§9.7). The editor is swapped inside the
       existing IDE first, so the editor migration and the IDE rewrite stay
       separate pieces of work — the IDE used exactly five things from CM4
       (construct, `setOption("theme")`, `on("change")`, `getValue`, `setSize`)
@@ -889,15 +890,22 @@ but note its ESM-only JS will need a shim wherever `bootstrap.Modal` /
 
 ### Still open
 
-7. **Editor themes: is Light/Dark/follow enough?** CodeMirror 6 expresses a
-   theme as an extension rather than a stylesheet, so CM4's 30 theme CSS files
-   do not carry over — they are not convertible, they are a different mechanism.
-   What ships is Light, Dark (`@codemirror/theme-one-dark`) and "Follow app
-   theme", which is the default because a light editor inside Darkly is the
-   wrong answer. **This is a reduction from 30 to 3**, and the one place Phase 4
-   removes a user-facing choice rather than reimplementing it. Each additional
-   theme is ~40 lines of `EditorView.theme` plus a `HighlightStyle`; the
-   question is whether any are worth writing.
+7. **Editor themes: is Light/Dark/follow enough?** **No — answered
+   2026-09-14.** Ten schemes now ship plus "Follow app theme": Light, GitHub,
+   Eclipse and Solarized Light; One Dark, Dracula, Monokai, Nord, Gruvbox Dark
+   and Solarized Dark.
+
+   They cost **18 KB raw / 1.6 KB gzipped**, because a CM6 theme is an
+   extension rather than a stylesheet — the same property that stopped CM4's 30
+   files carrying over makes their replacements nearly free. `web/src/editor/
+   themes.js` builds each from a sixteen-colour palette, so adding one is
+   adding a palette, not forty lines of boilerplate.
+
+   These are the published palettes, not ports of CM4's stylesheets — the same
+   honesty the Bootswatch deltas get. Solarized, Monokai and Eclipse were in
+   CM4's list under those names; the rest replace its more obscure entries with
+   schemes people can name. The list lives in `acelery/editor.js` and the
+   settings screen maps over it, so a palette cannot arrive without an option.
 8. **PHP and Java highlighting: wanted?** Their Lezer grammars are 133 KB of a
    566 KB editor bundle, and the IDE's New File dialog offers `.js` and `.css`
    only — CM4 carried `php` and `clike` because its mode directory shipped all
