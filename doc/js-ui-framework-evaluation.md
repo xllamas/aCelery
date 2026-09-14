@@ -37,6 +37,10 @@ aCelery, and stop hand-maintaining the 70% that Preact does better in 5 KB.**
 ES modules with an import map for user apps, Bootstrap 5.3 retained for CSS, an
 async `fetch` bridge, and `TableMaint` rebuilt as a Preact component.
 
+**Chosen 2026-09-14** (§9): that stack, **plus `react-bootstrap` on
+`preact/compat`** for the component set (§3.1a), and all 18 themes resolving
+through CSS variables (§3.4).
+
 Three measurements drive it:
 
 - **73 of 119 xScript classes are used by nothing.** Only 46 are instantiated
@@ -219,6 +223,88 @@ Why Preact over the alternatives, on the measurements above:
 - **htmx stays declined on architecture.** The bridge returns JSON capability
   results (`{"handle":"1"}`), not HTML fragments. Using htmx would move the whole
   UI layer into Dart, which §1.3 rules out on remote-access grounds.
+
+### 3.1a A component toolkit over Preact: React Bootstrap
+
+§3.1 assumes the ~33 components the IDE needs are hand-written. They need not be.
+**`react-bootstrap` 2.10.10 runs on `preact/compat`** and is the only mainstream
+toolkit that encapsulates what xScript's widget layer encapsulates *while keeping
+the Bootstrap 5.3 CSS Phase 3 just landed*.
+
+xScript's encapsulation has two halves, visible in `xbStringInput`
+(`xscript_bs5.js:23`), `xbSelect` (`:279`), and `xbForm` (`:593`):
+
+1. **Markup encapsulation.** The author writes `new xbStringInput("Name","mname")`
+   and never types `mb-3`, `form-label`, or `form-control`. The widget owns its
+   wrapper, label, control, and validation classes.
+2. **Imperative instance identity.** `getValue()`, `validate()`, `setError()` live
+   on a persistent object, and `xbForm` walks `this.elements` calling them.
+
+React Bootstrap supplies (1) exactly. Rendered under `preact/compat` in jsdom,
+`<Form.Group controlId="mname" className="mb-3">` + `<Form.Label>` +
+`<Form.Control type="text" name="mname" required />` emits:
+
+```html
+<div class="mb-3">
+  <label for="mname" class="fw-bold form-label">Name</label>
+  <input name="mname" required type="text" id="mname" class="form-control">
+</div>
+```
+
+That is `xbStringInput`'s markup, plus the `for`/`id` pairing §7.3 records as
+missing across the whole library. The accessibility fix arrives by construction
+rather than as a discipline to maintain across 33 hand-written components.
+
+**Measured** (esbuild bundle, `gzip -9`, same method as §3.1):
+
+| Bundle | raw | gzipped |
+|---|---|---|
+| preact + htm alone (§3.1 baseline) | 12 KB | 5 KB |
+| + react-bootstrap, 20 components (Form, Card, Navbar, Nav, Modal, Offcanvas, Dropdown, Tabs, Table, ListGroup, Pagination, InputGroup, Alert, Spinner, Badge, Row/Col/Container) | 127 KB | 46 KB |
+| `bootstrap.bundle.min.js`, then deletable | −80 KB | −24 KB |
+| **Net against §3.1** | **+35 KB** | **+17 KB** |
+
+react-bootstrap reimplements Modal, Dropdown, Offcanvas, Collapse, and Tabs in
+React and vendors its own Popper, so Bootstrap's JS can go — *provided* every
+imperative `bootstrap.Modal` / `bootstrap.Offcanvas` call site converts. 17 KB
+gzipped against a bundle shedding 6 MB is noise.
+
+It also compounds §6.1: react-bootstrap is 1.08 M downloads/wk, and its component
+names sit inside the React corpus a model already has. An AI writing
+`<Form.Group>` needs no generated reference at all — the argument that deletes a
+roadmap item gets stronger, not weaker.
+
+**What it does not supply is half (2).** There is no `form.getFormData()` or
+`form.validateForm()`; in a VDOM, state lives in the parent. Keep those as a thin
+local `<Form>` wrapper over react-bootstrap's `validated` prop and
+`<Form.Control.Feedback>`, which map onto `validate()`/`setError()` directly.
+`TableMaint` (§3.5) needs that wrapper regardless, so it is not extra work.
+
+**One build trap, hit while measuring.** Bundling naively pulls **two copies of
+preact core** — `preact.mjs` via `htm/preact`, `preact.js` via `preact/compat` —
+so the hooks module registers its `options` hooks on a different instance than the
+one rendering, and the first render dies with `TypeError: Cannot read properties
+of undefined (reading 'context')` inside `useBootstrapPrefix`. The stack points
+nowhere near the cause. Fix is resolution config in the §4 esbuild pass
+(`--main-fields=module,main` alongside the `react`/`react-dom` aliases), and it
+wants a guard test in the new suite for the same reason
+`bundle_migration_test.dart` exists.
+
+**The runner-up, and why it loses.** **Shoelace** is the only candidate that
+supplies *both* halves — `<sl-input label="Name">` with a real `.value` property
+and `.reportValidity()` is xScript's object model almost exactly. But it is Shadow
+DOM carrying its own design system: **248 KB raw / 59 KB gzipped for a
+16-component subset** plus its theme CSS, and Bootstrap's stylesheet does not
+reach inside it. That is the §3.1 disqualification for Lit and the §8 one for Web
+Awesome, arriving a third time. At 95 K downloads/wk it is also the least adopted
+option on the table. If the imperative instance API is what matters most, Shoelace
+is the honest answer — and Bootstrap, the Bootswatch themes, and §3.4 all go with
+it.
+
+**If adopted, three things elsewhere in this document change:** §5 gains ~35 KB
+raw (still ~1.2 MB total); §6's "~33 widget components" line shrinks to a
+`<Form>` wrapper plus whatever react-bootstrap lacks; and §8's step 6 becomes
+"vendor Preact + htm + react-bootstrap" with the resolution guard from above.
 
 ### 3.2 ES modules + an import map for user apps
 
@@ -507,15 +593,47 @@ take them now; if it proceeds, fold them in.
 
 Ordered so the system runs end-to-end at every step.
 
-**Phase 4a — foundations, no visible change**
-1. Doctype and viewport fixes (§7.1, §7.2); visual pass on device.
-2. Delete unreferenced CodeMirror mass and the dead Bootstrap CSS (§7.6) — ~2.1 MB.
-3. `esbuild` pass in `tool/build_bundle.sh` (§4).
+**Phase 4a — foundations, no visible change ✅ done (2026-09-14)**
+1. Doctype and viewport fixes (§7.1, §7.2); visual pass on device. ✅
+2. Delete unreferenced CodeMirror mass and the dead Bootstrap CSS (§7.6) — ~2.1 MB. ✅
+   Actual: CodeMirror **2.6 MB → 592 KB** (51 addons, 228 KB of keymaps, 78 of
+   84 modes, 89 demo pages); bundle **7.3 MB → 5.4 MB**, 464 → 122 files.
+3. `esbuild` pass in `tool/build_bundle.sh` (§4). ✅ `tool/build_js.sh` builds
+   `web/src/` → `bundle/www/tools/js/acelery/` and stamps the output with a hash
+   of its inputs, so a stale build fails a test. The output is committed: node
+   is needed to *rebuild*, never to pack.
 
-**Phase 4b — the bridge**
+**Phase 4b — the bridge ✅ done (2026-09-14)**
 4. Async `fetch` bridge as ES modules; delete the 28 `Android.*` branches;
-   batched `select`; bound parameters (§3.3).
+   batched `select`; bound parameters (§3.3). ✅ 29 branches removed (the count
+   here was 28 `Android.*` call sites across 29 `typeof` guards); `xscript.js`
+   1,941 → 1,793 lines.
 5. Dart side: add the batched + parameterised routes, drop the cursor routes.
+   ✅ **added**; the cursor routes **stay until 4d**. Dropping them now would
+   break the IDE, the launcher and the Example app, which still run on the
+   legacy library — and §8's own rule is that the system runs end-to-end at
+   every step. They go with the IDE rewrite at step 10.
+
+#### What the visual pass found
+
+§7.1 warned that leaving quirks mode *shifts* layouts. It did, and it exposed a
+second defect that had nothing to do with it:
+
+- **`addTitleWrapper` put a block `<h4>` inside the dropdown's `<a>`.** An
+  inline anchor containing a block child is split into anonymous boxes, so the
+  heading's text fell outside the anchor's hit area: the IDE's `Project` and
+  `File` menus opened only if you hit Bootstrap's `::after` caret, which had
+  itself dropped to a line of its own. Invisible in quirks mode. Now a
+  `<span class="h4 mb-0">` — Bootstrap ships `.h1`–`.h6` for exactly this.
+- **`navBar.navA` did not exist.** The IDE set the navbar brand through
+  `navBar.navA.node.innerHTML`, a *property* the Bootstrap 3 library exposed and
+  `xscript5` does not, so opening a project, opening a database, or closing
+  either threw `Cannot read properties of undefined (reading 'node')`. This
+  shipped in Phase 3 and is the same failure as `nav.addDropdown is not a
+  function`, one level down — which is why the method-level guard §6 describes
+  did not catch it. The four call sites now use `setTitle(title, "h4")`, which
+  also sets the title as text rather than markup (§7.4), and a new test pins
+  *properties* the shipped pages read, not just methods.
 
 **Phase 4c — the widget layer**
 6. Vendor Preact + htm; build the ~33 components the IDE needs, plus
@@ -545,40 +663,68 @@ but note its ESM-only JS will need a shim wherever `bootstrap.Modal` /
 
 ---
 
-## 9. Open decisions
+## 9. Decisions
 
-1. **Is aCelery being developed toward launch, or preserved as working?** The
-   only question in this document I can't answer from the code, and it decides
-   §6. Everything else follows.
-2. **Is AI/MCP authoring actually in the plan?** If yes, §6.1 is decisive and the
-   rewrite is clearly worth it. If it was speculative, the case rests on the
-   thinner ground of bytes and maintenance.
-3. **Preact + htm, or plain Preact with `h()` calls?** htm costs <1 KB and reads
-   far better; the only argument against is one more concept for authors.
-4. **Does the widget API stay a fluent builder, or become components?** §3.1
-   assumes components. A builder API *over* Preact is possible if you prefer the
-   xScript feel, but it hides the framework from authors and forfeits the AI
-   fluency argument in §6.1.
-5. **How many themes survive?** §3.4 keeps all 18 `xbTheme` values resolving via
-   CSS variables, but variable overrides are not pixel-identical to hand-tuned
-   Bootswatch builds. Alternative: ship 3–4 exactly.
-6. **Native date pickers or Tempus Dominus?** Better on phones, 136 KB lighter,
-   thinner on desktop. Needs an iOS WKWebView check.
-7. **Does the threat model include untrusted app data?** Imported projects,
+**Settled 2026-09-14** (1–6). The remaining open questions are 7 and 8.
+
+1. **Is aCelery being developed toward launch, or preserved as working?**
+   **Developed.** §6's counter-argument — that revision 1's eleven targeted
+   fixes are the better trade if aCelery is being preserved rather than
+   developed — does not apply. Phase 4 proceeds.
+2. **Is AI/MCP authoring actually in the plan?** **Yes**, so §6.1 is decisive:
+   choosing a mainstream framework deletes the "auto-generate the framework
+   reference" roadmap item in `modernization-assessment.md` Addendum 3.
+3. **Preact + htm, or plain Preact with `h()` calls?** **htm.** <1 KB, and the
+   markup reads as markup.
+4. **Does the widget API stay a fluent builder, or become components?**
+   **Components.** A builder over Preact would keep the xScript feel but hide
+   the framework from authors, forfeiting the §6.1 fluency argument — which is
+   the strongest reason for doing any of this.
+5. **Hand-written components, or `react-bootstrap` on `preact/compat`?**
+   **`react-bootstrap`** (§3.1a). ~17 KB gzipped net once Bootstrap's own JS
+   comes out; it deletes most of the "~33 components" line from §6 and fixes
+   §7.3's missing `for`/`id` pairing by construction. Consequences to carry into
+   Phase 4c:
+   - every imperative `bootstrap.Modal` / `bootstrap.Offcanvas` call site must
+     convert, or `bootstrap.bundle.min.js` cannot be dropped and the byte case
+     evaporates;
+   - the esbuild pass needs consistent ESM resolution (`--main-fields=module,main`
+     alongside the `react`/`react-dom` aliases) or two copies of preact core get
+     bundled and the first render dies inside `useBootstrapPrefix`. This wants a
+     guard test from day one, per §6.
+   - `getFormData`/`validateForm` have no equivalent and stay a local `<Form>`
+     wrapper over `validated` + `<Form.Control.Feedback>`.
+6. **How many themes survive?** **All 18**, resolving through `data-bs-theme`
+   and CSS variables (§3.4). Accepted trade: variable overrides are not
+   pixel-identical to hand-tuned Bootswatch builds, so some themes will be
+   approximations of their old selves. ~4.1 MB → ~250 KB.
+
+### Still open
+
+7. **Native date pickers or Tempus Dominus?** Better on phones, 136 KB lighter,
+   thinner on desktop. Needs an iOS WKWebView check. Decidable at Phase 4e.
+8. **Does the threat model include untrusted app data?** Imported projects,
    `xHTTP` responses, and AI-authored apps all move §7.4 and §3.3's parameterised
-   queries from housekeeping to prerequisite.
+   queries from housekeeping to prerequisite. Phase 4b shipped the parameterised
+   routes regardless, so this now only governs how hard §7.4's escaping work is
+   pushed — and decision 2 ("yes" to AI authoring) argues for treating it as a
+   prerequisite.
 
 ---
 
 ## Sources
 
 Library versions, download counts, and byte sizes measured 2026-09-12 from the
-npm registry and the published UMD/prebuilt dists (`gzip -9`). Upstream status:
+npm registry and the published UMD/prebuilt dists (`gzip -9`). §3.1a's figures
+were measured 2026-09-14 from esbuild bundles of `react-bootstrap` 2.10.10 on
+`preact/compat` and of a 16-component `@shoelace-style/shoelace` subset, with the
+rendered markup verified under Preact in jsdom. Upstream status:
 
 - [Bootstrap 6 release discussion (twbs)](https://github.com/orgs/twbs/discussions/41078) · [Bootstrap in 2026 — current 5.3.8](https://canvastemplate.com/blog/bootstrap-2026)
 - [Preact releases](https://github.com/preactjs/preact/releases) · [What's new in Preact for 2026](https://blog.openreplay.com/whats-new-preact-2026/)
 - [Lit: Working with Shadow DOM](https://lit.dev/docs/components/shadow-dom/) · [Attach light-DOM component styles (lit#3541)](https://github.com/lit/lit/issues/3541) · [Global styles in Shadow DOM](https://eisenbergeffect.medium.com/using-global-styles-in-shadow-dom-5b80e802e89d)
 - [alpinejs on npm](https://www.npmjs.com/package/alpinejs)
+- [React Bootstrap (Bootstrap 5 components)](https://react-bootstrap.github.io/) · [Preact: aliasing React to preact/compat](https://preactjs.com/guide/v10/getting-started#aliasing-in-webpack) · [Shoelace components](https://shoelace.style/)
 - [Vue installation / global builds](https://vueframework.com/guide/installation.html)
 - [Import maps supported cross-browser (web.dev)](https://web.dev/blog/import-maps-in-all-modern-browsers) · [caniuse: import maps](https://caniuse.com/import-maps)
 - [CodeMirror 5→6 migration guide](https://codemirror.net/docs/migration/) · [CM6 bundle size (codemirror/dev#760)](https://github.com/codemirror/dev/issues/760) · [Monaco vs CodeMirror vs Ace, 2026](https://www.pistack.xyz/posts/2026-08-22-browser-code-editors-monaco-codemirror-ace-comparison/)
