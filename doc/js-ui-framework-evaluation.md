@@ -716,10 +716,29 @@ second defect that had nothing to do with it:
   still come back as a 304 over loopback.
 
 **Phase 4d — the product**
-9. `TableMaint` as a Preact component, with keyed rows (§3.5).
-10. Rewrite the IDE on the new stack; CodeMirror 6 (§3.7).
+9. `TableMaint` as a Preact component, with keyed rows (§3.5). ✅ **done
+   (2026-09-14).** All five views, rowid pagination, slave mode for linked
+   tables, every field type, the list/search flags, the validator model and all
+   seven pre/post hooks. Nothing is demolished to redraw it, every statement is
+   parameterised, and the database calls are async.
+10. Rewrite the IDE on the new stack; CodeMirror 6 (§3.7). **Next — the largest
+    single item in the plan.**
 11. Rewrite the Example app — it is the reference documentation for authors.
-12. New test suite replacing the Bootstrap-3-era guards (§6).
+    ✅ **done (2026-09-14).** One file on the new API, demonstrating CRUD,
+    linked tables, tabs, forms with validation, a responsive `<Row>`/`<Col>`
+    layout, a modal, theme switching and CSV export. `jsonNews()` is dropped:
+    it called the Google Feed API, dead since 2016.
+12. New test suite replacing the Bootstrap-3-era guards (§6). **In progress** —
+    64 node tests and 123 Dart tests so far, including both halves of the
+    JS↔SQLite seam.
+
+#### A defect the rebuild fixed by construction
+
+`xbTableMaint.findResult` interpolated `fld.getName` — the function object, not
+its result — into both range branches, so a range search on a number, money or
+date column has produced invalid SQL since 2014 and cannot ever have worked. It
+is not reachable from the shipped Example app, which is presumably why it
+survived. Parameterised queries make the shape unwritable.
 
 **Phase 4e — additions**
 13. `<Chart>` on Chart.js (§3.8).

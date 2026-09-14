@@ -312,6 +312,138 @@ void main() {
     });
   });
 
+  group('the SQL TableMaint emits is valid against real SQLite', () {
+    // web/test/table_maint.test.js pins which statements the component sends,
+    // against a stub. This pins that those statements actually run — the two
+    // halves of the same contract, and neither is sufficient alone. Phase 3
+    // shipped a break of exactly this shape: each side checked, the seam not.
+
+    late String handle;
+
+    setUp(() async {
+      handle = (await get('opt=sql&action=opendb&path=tm.db'))['handle']
+          as String;
+      await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'create table person (mname text, email text, age integer)',
+      });
+      await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'create table phone (person integer, number text)',
+      });
+      for (final (name, mail, age) in [
+        ('Ada', 'ada@example.com', 36),
+        ('Grace', 'grace@example.com', 45),
+        ('Alan', 'alan@example.com', 41),
+      ]) {
+        await callJson('opt=sql&action=insertrow', {
+          'handle': handle,
+          'sql': 'insert into person (mname, email, age) values (?, ?, ?)',
+          'args': [name, mail, age],
+        });
+      }
+    });
+
+    Future<List> select(String sql, [List<Object?> args = const []]) async =>
+        (await callJson(
+            'opt=sql&action=query', {'handle': handle, 'sql': sql, 'args': args}))['rows'] as List;
+
+    test('the list page query runs and pages by rowid', () async {
+      final first = await select(
+          'select rowid, * from person where rowid >= ? order by rowid asc limit 2',
+          [0]);
+      expect(first, hasLength(2));
+      expect(first.first['mname'], 'Ada');
+
+      final next = await select(
+          'select rowid, * from person where rowid >= ? order by rowid asc limit 2',
+          [(first.last['rowid'] as int) + 1]);
+      expect(next.single['mname'], 'Alan');
+    });
+
+    test('paging backwards reverses, as the Prev button does', () async {
+      final back = await select(
+          'select rowid, * from person where rowid <= ? order by rowid desc limit 2',
+          [3]);
+      expect(back.map((r) => r['mname']), ['Alan', 'Grace']);
+    });
+
+    test('the record query binds its rowid', () async {
+      final row = await select('select rowid, * from person where rowid = ?', [2]);
+      expect(row.single['mname'], 'Grace');
+    });
+
+    test('a prefix search matches, and cannot be escaped', () async {
+      expect(await select('select rowid, * from person where ((mname like ?))', ['A%']),
+          hasLength(2));
+
+      // A value that would close the quote in a concatenated statement.
+      final nasty = await select(
+          'select rowid, * from person where ((mname like ?))', ["A%' or '1'='1"]);
+      expect(nasty, isEmpty, reason: 'the argument was treated as data');
+    });
+
+    test('a numeric range search runs — the query that never worked', () async {
+      // xbTableMaint.findResult interpolated `fld.getName`, the function
+      // object, so the statement it built was not valid SQL at all.
+      final rows = await select(
+          'select rowid, * from person where ((age >= ? and age <= ?))', [40, 46]);
+      expect(rows.map((r) => r['mname']), ['Grace', 'Alan']);
+    });
+
+    test('insert, update and delete round-trip with placeholders', () async {
+      final rowid = (await callJson('opt=sql&action=insertrow', {
+        'handle': handle,
+        'sql': 'insert into person (mname, email, age) values (?, ?, ?)',
+        'args': ['Edsger', 'e@example.com', 72],
+      }))['rowid'];
+
+      await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'update person set mname = ?, email = ?, age = ? where rowid = ?',
+        'args': ['Edsger D', 'e@example.com', 72, rowid],
+      });
+      expect(
+        (await select('select mname from person where rowid = ?', [rowid]))
+            .single['mname'],
+        'Edsger D',
+      );
+
+      await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'delete from person where rowid = ?',
+        'args': [rowid],
+      });
+      expect(await select('select rowid from person where rowid = ?', [rowid]),
+          isEmpty);
+    });
+
+    test('a linked table filters by its link column', () async {
+      await callJson('opt=sql&action=insertrow', {
+        'handle': handle,
+        'sql': 'insert into phone (person, number) values (?, ?)',
+        'args': [1, '555'],
+      });
+      final rows = await select(
+          'select rowid, * from phone where person = ? and rowid >= ? '
+          'order by rowid asc',
+          [1, 0]);
+      expect(rows.single['number'], '555');
+    });
+
+    test('a null binds as NULL, not as the string "null"', () async {
+      final rowid = (await callJson('opt=sql&action=insertrow', {
+        'handle': handle,
+        'sql': 'insert into person (mname, email, age) values (?, ?, ?)',
+        'args': ['Nulls', 'n@example.com', null],
+      }))['rowid'];
+      final row = await select('select age from person where rowid = ?', [rowid]);
+      expect(row.single['age'], isNull);
+      expect(await select('select rowid from person where age is null'),
+          hasLength(1));
+    });
+  });
+
   group('opt=file', () {
     test('open, write, read and delete a file', () async {
       final handle =

@@ -34,6 +34,7 @@ export {
   notEmpty, notZero, email, tel, maxLength,
 } from "./form.js";
 export { Container, Row, Col, Panel, Card } from "./layout.js";
+export { TableMaint, useTableOptions } from "./table_maint.js";
 export {
   THEMES, applyTheme, currentTheme, isDark, ThemeSelect,
 } from "./theme.js";
