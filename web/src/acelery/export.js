@@ -59,17 +59,51 @@ function download(url) {
 }
 
 /**
- * Outside the app — a browser on the LAN — there is no host channel. Navigating
- * to the same URL is what a remote user wants anyway: the browser saves the
- * Content-Disposition response itself.
+ * Outside the app — a browser on the LAN — there is no host channel, and each
+ * of these has to mean something there too. Serving apps to another device is
+ * the reason the embedded server is reachable at all (port plan §1.3); an
+ * action that only works on the device quietly removes the point of it.
+ *
+ * Phase 4b got this wrong: every action but `download` threw, so `Run` in a
+ * remote browser raised inside a click handler and looked like a dead menu
+ * item. The 2014 library did `window.open("/system/launcher.html?app=…")`, and
+ * that is still the right answer — the launcher works over HTTP like
+ * everything else.
  */
 function post(payload) {
   const host = globalThis.ACeleryHost;
   if (host) {
     host.postMessage(JSON.stringify(payload));
-  } else if (payload.action === "download") {
-    globalThis.location.href = payload.url;
-  } else {
-    throw new Error(`${payload.action} is only available inside aCelery`);
+    return;
+  }
+
+  switch (payload.action) {
+    case "download":
+      // The browser saves the Content-Disposition response itself.
+      globalThis.location.href = payload.url;
+      return;
+
+    case "runApp":
+      // A new tab, so the IDE stays where it was — what window.open did.
+      globalThis.open(
+        `/system/launcher.html?app=${encodeURIComponent(payload.app)}`,
+        "_blank",
+      );
+      return;
+
+    case "closeApp":
+      // The launcher is its own tab; closing it is the browser's business.
+      // window.close() is a no-op on a tab the script did not open, so go back
+      // rather than appear to do nothing.
+      if (globalThis.history.length > 1) globalThis.history.back();
+      else globalThis.close();
+      return;
+
+    default:
+      // importProject needs the device's file picker and has no remote form.
+      throw new Error(
+        `${payload.action} needs the aCelery app; it is not available from a ` +
+          "browser on the network.",
+      );
   }
 }

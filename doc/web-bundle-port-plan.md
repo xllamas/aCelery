@@ -403,6 +403,14 @@ Two host-side changes fell out of it, both recorded in `lib/`:
 1.72 MB → 725 KB zipped, and `assets/aCelery.zip` now contains 70 files against
 the original 690.
 
+**Remote access ✅ built (2026-09-14)** — `modernization-assessment.md` §2.
+Sharing is off by default and lives behind a host-side switch; a device on the
+network pairs before it sees anything, approval is per-device with a code so two
+simultaneous requests cannot be confused, and the token rather than the address
+is the credential. Also fixed: Phase 4b had dropped `xRunUserApp`'s remote
+fallback, so `Run` threw in a browser on the network — the feature's whole
+point.
+
 **Still open:** decisions 7, 8 and 10 in `js-ui-framework-evaluation.md` §9
 (editor themes, PHP/Java highlighting, the untrusted-data threat model), none of
 which gate anything. One verification is outstanding: §3.9's native date pickers

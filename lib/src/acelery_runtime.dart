@@ -16,7 +16,7 @@ class ACeleryRuntime {
 
   /// Bump when `assets/aCelery.zip` changes, so installed devices refresh the
   /// shipped files on their next launch. User content is never touched.
-  static const String bundleVersion = '1.4.0+editor-themes';
+  static const String bundleVersion = '1.5.0+remote-access';
 
   final ACeleryPaths paths;
   final ACeleryServer server;
@@ -61,6 +61,9 @@ class ACeleryRuntime {
       databaseFactory: factory ?? databaseFactory,
       port: port,
     );
+    // Who is paired, and whether to listen beyond loopback, are both remembered
+    // across launches — so this has to be read before the socket is bound.
+    await server.access.load();
     await server.start();
 
     return ACeleryRuntime._(paths, server);

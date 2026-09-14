@@ -76,6 +76,21 @@ ungated, which I verified live:
 
 So today, any device on the same Wi-Fi can reach this app's database and files.
 
+> **Status 2026-09-14 — built.** `lib/src/server/access_control.dart` and the
+> Network access sheet implement the model below, and
+> `test/access_control_test.dart` exercises it over real sockets from a real
+> non-loopback address, because testing a network gate through loopback proves
+> nothing: loopback is the case that is *supposed* to skip it.
+>
+> One thing the build changed from the sketch. Approval and the token are not
+> alternatives — the address raises the prompt and is then only a label. The
+> same device, already approved, is refused without its token, which is the
+> point of item 3 and was verified on the device.
+>
+> Item 4 (confinement) landed earlier, in `FileBridge`. Item 5 (a switch) is
+> the sheet, and it defaults to off: the original was always exposed, which is
+> what made the missing authentication live rather than latent.
+
 **Recommendation — add an authorization layer for *external* connections**
 
 The natural model, matching the agreed "allow on first outside connection" idea:

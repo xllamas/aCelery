@@ -196,3 +196,76 @@ test("every bridge call opts out of the http cache", async () => {
   await new sql.Database(1).select("select 1");
   assert.equal(seen.cache, "no-store");
 });
+
+/* ------------------------------------------------------- the host actions */
+
+/** Installs a fake host channel and returns what it was sent. */
+function stubHost() {
+  const sent = [];
+  globalThis.ACeleryHost = { postMessage: (m) => sent.push(JSON.parse(m)) };
+  return sent;
+}
+
+test("on the device, host actions go to the channel", async () => {
+  const sent = stubHost();
+  const { runApp, closeApp, importProject } = await import("../src/acelery/export.js");
+
+  runApp("Example", "Example", true);
+  closeApp();
+  importProject();
+
+  assert.deepEqual(sent.map((m) => m.action),
+    ["runApp", "closeApp", "importProject"]);
+  assert.equal(sent[0].app, "Example");
+  assert.equal(sent[0].debug, true);
+  delete globalThis.ACeleryHost;
+});
+
+test("from a browser on the network, Run opens the launcher", async () => {
+  // The regression Phase 4b shipped: every action but `download` threw, so Run
+  // raised inside a click handler and looked like a dead menu item. Serving
+  // apps to another device is the reason the server is reachable at all.
+  delete globalThis.ACeleryHost;
+  const opened = [];
+  globalThis.open = (url, target) => opened.push({ url, target });
+
+  const { runApp } = await import("../src/acelery/export.js");
+  runApp("My App", "My App", false);
+
+  assert.equal(opened.length, 1);
+  assert.equal(opened[0].target, "_blank");
+  assert.match(opened[0].url, /^\/system\/launcher\.html\?app=/);
+  // A name with a space or an ampersand must survive the round trip.
+  assert.match(opened[0].url, /app=My%20App$/);
+});
+
+test("closeApp goes back rather than appearing to do nothing", async () => {
+  // window.close() is a no-op on a tab the script did not open.
+  delete globalThis.ACeleryHost;
+  let wentBack = 0;
+  globalThis.history = { length: 3, back: () => wentBack++ };
+
+  const { closeApp } = await import("../src/acelery/export.js");
+  closeApp();
+  assert.equal(wentBack, 1);
+});
+
+test("importProject says why it cannot work remotely", async () => {
+  // It needs the device's file picker; there is no remote form of it. The
+  // message has to say that rather than throw a bare failure.
+  delete globalThis.ACeleryHost;
+  const { importProject } = await import("../src/acelery/export.js");
+  assert.throws(importProject, /needs the aCelery app/);
+});
+
+test("a download navigates when there is no host to hand it to", async () => {
+  delete globalThis.ACeleryHost;
+  const location = { href: "" };
+  globalThis.location = location;
+
+  stubFetch(() => ({ text: JSON.stringify({ handle: "7" }) }));
+  const { saveFile } = await import("../src/acelery/export.js");
+  await saveFile("text/csv", "x.csv", "a,b");
+
+  assert.match(location.href, /opt=export&action=get&handle=7/);
+});

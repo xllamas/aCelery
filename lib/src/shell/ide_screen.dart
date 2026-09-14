@@ -1,12 +1,14 @@
-import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../acelery_runtime.dart';
+import '../server/access_control.dart';
 import 'acelery_web_view.dart';
 import 'host_actions.dart';
 import 'host_bridge.dart';
+import 'network_access_sheet.dart';
 import 'user_app_screen.dart';
 
 /// Replaces `ACeleryActivity`: the IDE, plus the options menu that sat on it.
@@ -28,16 +30,37 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
 
   ACeleryWebViewState? get _webView => _webViewKey.currentState;
 
+  StreamSubscription<PendingPairing>? _pairings;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // A device on the network asking to connect has to interrupt: it is
+    // waiting on a decision only the person holding the phone can make.
+    _pairings = widget.runtime.server.access.requests.listen(_onPairingRequest);
   }
 
   @override
   void dispose() {
+    _pairings?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  Future<void> _onPairingRequest(PendingPairing pairing) async {
+    if (!mounted || pairing.isSettled) return;
+    final allowed = await showPairingRequest(context, pairing);
+    // The user may have taken a while; if the request expired or was answered
+    // elsewhere in the meantime, leave it alone.
+    if (pairing.isSettled) return;
+    final access = widget.runtime.server.access;
+    if (allowed) {
+      await access.approve(pairing.id);
+    } else {
+      await access.deny(pairing.id);
+    }
   }
 
   @override
@@ -103,7 +126,7 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
       case _MenuAction.myApps:
         await _webView?.controller.loadRequest(widget.runtime.myAppsUrl);
       case _MenuAction.getIp:
-        await _showIpAddress();
+        await _showNetworkAccess();
       case _MenuAction.noSleep:
         await _toggleNoSleep();
       case _MenuAction.about:
@@ -116,43 +139,20 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// `getMyIP` — the address another device would point a browser at.
+  /// `getMyIP`, grown into the setting §2 item 5 asks for.
   ///
-  /// The server now binds to loopback by default, so this reports whether LAN
-  /// access is actually available rather than implying that it is.
-  Future<void> _showIpAddress() async {
-    if (!widget.runtime.server.isSharedOnNetwork) {
-      await _showMessage(
-        'Network access',
-        'The server is only listening on this device.\n\n'
-        'The original app served every network interface by default, which '
-        'exposed its database and file APIs to anyone on the same network. '
-        'Turn network sharing on deliberately when you want it.',
-      );
-      return;
-    }
-
-    final addresses = await NetworkInterface.list(
-      type: InternetAddressType.IPv4,
-      includeLoopback: false,
-    );
-    final ip = addresses
-        .expand((interface) => interface.addresses)
-        .map((address) => address.address)
-        .firstOrNull;
-
-    await _showMessage(
-      'Network access',
-      ip == null
-          ? 'No network address available.'
-          : 'Point a browser at:\n\nhttp://$ip:${widget.runtime.server.boundPort}',
+  /// The original only ever reported an address, because the server was always
+  /// listening on it. Now that sharing is opt-in there is something to decide,
+  /// and something to review: which devices were let in, and a way to change
+  /// your mind about them.
+  Future<void> _showNetworkAccess() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => NetworkAccessSheet(server: widget.runtime.server),
     );
   }
 
-  /// `noSleep` — the original held a PARTIAL_WAKE_LOCK so its background
-  /// Service kept serving. There is no Service any more, so this keeps the
-  /// screen awake while the app is in front instead; it does not keep the
-  /// server running once aCelery is backgrounded.
   Future<void> _toggleNoSleep() async {
     final enable = !_noSleep;
     await WakelockPlus.toggle(enable: enable);

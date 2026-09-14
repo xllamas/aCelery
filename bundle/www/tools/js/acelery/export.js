@@ -30,10 +30,26 @@ function post(payload) {
   const host = globalThis.ACeleryHost;
   if (host) {
     host.postMessage(JSON.stringify(payload));
-  } else if (payload.action === "download") {
-    globalThis.location.href = payload.url;
-  } else {
-    throw new Error(`${payload.action} is only available inside aCelery`);
+    return;
+  }
+  switch (payload.action) {
+    case "download":
+      globalThis.location.href = payload.url;
+      return;
+    case "runApp":
+      globalThis.open(
+        `/system/launcher.html?app=${encodeURIComponent(payload.app)}`,
+        "_blank"
+      );
+      return;
+    case "closeApp":
+      if (globalThis.history.length > 1) globalThis.history.back();
+      else globalThis.close();
+      return;
+    default:
+      throw new Error(
+        `${payload.action} needs the aCelery app; it is not available from a browser on the network.`
+      );
   }
 }
 export {

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:shelf/shelf.dart';
@@ -10,7 +11,9 @@ import '../bridge/file_bridge.dart';
 import '../bridge/http_bridge.dart';
 import '../bridge/sql_bridge.dart';
 import '../paths.dart';
+import 'access_control.dart';
 import 'itf_handler.dart';
+import 'pairing_page.dart';
 
 /// The embedded HTTP server: serves the aCelery web bundle and the
 /// `/android.itf` bridge.
@@ -24,10 +27,15 @@ class ACeleryServer {
     required DatabaseFactory databaseFactory,
     this.port = defaultPort,
     this.address,
+    AccessControl? access,
   })  : sql = SqlBridge(paths: paths, factory: databaseFactory),
         files = FileBridge(paths: paths),
         http = HttpBridge(),
-        export = ExportBridge(paths: paths);
+        export = ExportBridge(paths: paths),
+        access = access ??
+            AccessControl(
+              storeFile: File('${paths.base}/.acelery-access.json'),
+            );
 
   /// The port the bundle hard-codes in `xRunUserApp` and the IDE's URLs.
   static const int defaultPort = 8123;
@@ -35,11 +43,16 @@ class ACeleryServer {
   final ACeleryPaths paths;
   final int port;
 
-  /// Defaults to loopback. The Android original bound to every interface so a
-  /// user could run their apps from a browser on another device; that is now
-  /// opt-in, because it exposed the full SQL and filesystem bridge to the LAN
-  /// with no authentication.
+  /// Overrides the address the socket binds to, for tests.
+  ///
+  /// In the app the address follows [AccessControl.sharedOnNetwork]: loopback
+  /// when sharing is off, every interface when it is on. The Android original
+  /// bound to every interface unconditionally, which is what made the missing
+  /// authentication a live exposure.
   final InternetAddress? address;
+
+  /// Who may talk to this server, and whether it listens beyond loopback.
+  final AccessControl access;
 
   final SqlBridge sql;
   final FileBridge files;
@@ -58,8 +71,16 @@ class ACeleryServer {
 
   /// True when the server is reachable from other devices. The Android
   /// original was always in this state; it is now opt-in.
-  bool get isSharedOnNetwork =>
-      address != null && address != InternetAddress.loopbackIPv4;
+  bool get isSharedOnNetwork => _boundAddress?.isLoopback == false;
+
+  InternetAddress? _boundAddress;
+
+  /// The address the socket should bind to for the current setting.
+  InternetAddress get _target =>
+      address ??
+      (access.sharedOnNetwork
+          ? InternetAddress.anyIPv4
+          : InternetAddress.loopbackIPv4);
 
   Future<void> start() async {
     if (_server != null) return;
@@ -94,11 +115,128 @@ class ACeleryServer {
       return serveStatic(request);
     }
 
+    /// Everything goes through the gate first.
+    ///
+    /// Including static files: an unpaired device must not be handed anything
+    /// from the document root, which is the thing being protected.
+    Future<Response> guarded(Request request) async {
+      final peer = _peerOf(request);
+
+      // The pairing endpoints are the one thing an unpaired device may reach,
+      // or it could never become paired.
+      if (request.url.path.startsWith('acelery.pair')) {
+        return _pairing(request, peer);
+      }
+
+      switch (access.check(request, peer)) {
+        case AccessAllowed():
+          return route(request);
+
+        case AccessRefused():
+          return Response.forbidden(
+            'aCelery is not shared on this network.',
+            headers: {'Content-Type': 'text/plain; charset=utf-8'},
+          );
+
+        case AccessPairingRequired(:final pairing):
+          // A navigation gets a page it can act on; a subresource gets a
+          // status, because replacing a stylesheet with HTML helps nobody.
+          final wantsHtml =
+              (request.headers['accept'] ?? '').contains('text/html');
+          if (!wantsHtml) {
+            return Response(
+              401,
+              body: jsonEncode({'pairing': pairing.id, 'code': pairing.code}),
+              headers: {'Content-Type': 'application/json; charset=utf-8'},
+            );
+          }
+          return Response.ok(
+            pairingPage(pairingId: pairing.id, code: pairing.code),
+            headers: {
+              'Content-Type': 'text/html; charset=utf-8',
+              'Cache-Control': 'no-store',
+            },
+          );
+      }
+    }
+
+    _boundAddress = _target;
     _server = await shelf_io.serve(
-      const Pipeline().addHandler(route),
-      address ?? InternetAddress.loopbackIPv4,
+      const Pipeline().addHandler(guarded),
+      _boundAddress!,
       port,
     );
+  }
+
+  /// The address the request came from.
+  ///
+  /// shelf exposes it through the connection info it puts in the context.
+  InternetAddress _peerOf(Request request) {
+    final info = request.context['shelf.io.connection_info'];
+    if (info is HttpConnectionInfo) return info.remoteAddress;
+    // No connection info means an in-process call, which is as local as it
+    // gets. Failing closed here would lock the app out of its own server.
+    return InternetAddress.loopbackIPv4;
+  }
+
+  /// The two endpoints an unpaired device may reach.
+  Future<Response> _pairing(Request request, InternetAddress peer) async {
+    if (peer.isLoopback) {
+      // The app's own WebView never pairs; saying so beats a puzzling page.
+      return Response.ok('This device does not need to pair.',
+          headers: {'Content-Type': 'text/plain; charset=utf-8'});
+    }
+
+    if (request.url.path == 'acelery.pair/status') {
+      access.expire();
+      final id = request.url.queryParameters['id'];
+      final pairing = id == null ? null : access.pendingById(id);
+
+      if (pairing == null) {
+        // Either it was answered and cleared, or the app restarted. Both mean
+        // "ask again".
+        return _json({'state': 'unknown'});
+      }
+      if (!pairing.isSettled) return _json({'state': 'pending'});
+
+      // The answer is delivered exactly once; the record goes with it.
+      final token = await pairing.settled;
+      access.collect(pairing.id);
+      if (token == null) return _json({'state': 'denied'});
+
+      // The token rides back as an HttpOnly cookie, so no script — ours or
+      // anyone's — can read it out of the page.
+      return _json({'state': 'approved'}, headers: {
+        'Set-Cookie': '${AccessControl.cookieName}=$token; Path=/; '
+            'HttpOnly; SameSite=Strict; Max-Age=31536000',
+      });
+    }
+
+    return Response.notFound('Not found');
+  }
+
+  static Response _json(Object? body, {Map<String, String> headers = const {}}) =>
+      Response.ok(
+        jsonEncode(body),
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store',
+          ...headers,
+        },
+      );
+
+  /// Turns network sharing on or off, rebinding the socket.
+  ///
+  /// The address a socket listens on cannot be changed once bound, so this is
+  /// a stop and a start. Paired devices survive it; open connections do not.
+  Future<void> setSharedOnNetwork(bool shared) async {
+    if (access.sharedOnNetwork == shared && isRunning) return;
+    await access.setShared(shared);
+    if (!isRunning) return;
+
+    await _server?.close(force: true);
+    _server = null;
+    await start();
   }
 
   Future<void> stop() async {
