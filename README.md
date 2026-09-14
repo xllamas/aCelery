@@ -131,4 +131,10 @@ those references will not resolve from a fresh clone.
 
 ## Licence
 
-GPLv3, per the headers carried by `xscript5/` and the original sources.
+GNU General Public License v3.0 — see [`LICENSE`](LICENSE). This is the licence
+the 2014 sources were released under, and the headers in `xscript5/` and the
+original Android app carry it; the file makes it explicit rather than implied.
+
+The `LICENSE` file is the verbatim FSF text. Its closing section is the
+standard "How to Apply These Terms" appendix, so the `<year>` and
+`<name of author>` placeholders in it are instructions, not blanks to fill in.
