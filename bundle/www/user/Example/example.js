@@ -23,6 +23,9 @@
 
 import { openDB } from "acelery/sql.js";
 import { saveFile, closeApp } from "acelery/export.js";
+/* Charts are a separate import because Chart.js is 68 KB gzipped and most apps
+   never draw one — an app pays for it only by asking. */
+import { Chart, fromRows } from "acelery/chart.js";
 import {
   html, render, useState, useEffect,
   Navbar, Nav, NavDropdown, Container,
@@ -208,6 +211,54 @@ function ExportDemo({ db }) {
     <//>`;
 }
 
+/**
+ * A chart over the data the Directory holds.
+ *
+ * `fromRows` is the step between a result set and a Chart.js config, which is
+ * otherwise written once per app: group in SQL, chart the rows.
+ */
+function ChartDemo({ db }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let live = true;
+    db.select(
+      "select coalesce(nullif(grp, ''), 'unassigned') as grp, count(*) as people" +
+        " from person group by grp order by people desc",
+    ).then(
+      (rows) => live && setData(rows),
+      (e) => live && setError(e.message),
+    );
+    return () => { live = false; };
+  }, [db]);
+
+  if (error) return html`<${Alert} variant="danger">${error}<//>`;
+  if (!data) return html`<p class="text-body-secondary">Counting…</p>`;
+
+  return html`
+    <${Panel} title="People per group">
+      ${data.length
+        ? html`
+            <${Row}>
+              <${Col} span=${6}>
+                <${Chart} type="bar" height=${260}
+                  data=${fromRows(data, "grp", "people")} />
+              <//>
+              <${Col} span=${6}>
+                <${Chart} type="doughnut" height=${260}
+                  data=${fromRows(data, "grp", "people")} />
+              <//>
+            <//>
+            <p class="text-body-secondary mt-3 mb-0">
+              One query, two charts. Add people in the Directory and come back.
+            </p>`
+        : html`<${Alert} variant="secondary">
+            Nothing to chart yet — add someone in the Directory first.
+          <//>`}
+    <//>`;
+}
+
 /** The front page. */
 const Welcome = () => html`
   <${Panel} title="aCelery Example">
@@ -226,6 +277,9 @@ const Welcome = () => html`
         <strong>Widgets</strong> — forms, validation and a responsive layout
       <//>
       <${ListGroup.Item}>
+        <strong>Chart</strong> — group in SQL, chart the rows
+      <//>
+      <${ListGroup.Item}>
         <strong>Export</strong> — build a file and hand it to the device
       <//>
     <//>
@@ -240,6 +294,7 @@ const SCREENS = {
   tabs: TabsDemo,
   widgets: WidgetsDemo,
   modal: ModalDemo,
+  chart: ChartDemo,
   export: ExportDemo,
 };
 
@@ -287,6 +342,7 @@ function App() {
             <//>
             <${Nav.Link} onClick=${() => go("tabs")}>Tabs<//>
             <${Nav.Link} onClick=${() => go("widgets")}>Widgets<//>
+            <${Nav.Link} onClick=${() => go("chart")}>Chart<//>
             <${Nav.Link} onClick=${() => go("modal")}>Modal<//>
             <${Nav.Link} onClick=${closeApp}>Exit<//>
           <//>

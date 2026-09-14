@@ -25,7 +25,8 @@
 export { html } from "htm/preact";
 export { render, createRef, Fragment, createContext } from "preact";
 export {
-  useState, useEffect, useMemo, useRef, useCallback, useContext, useReducer,
+  useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback,
+  useContext, useReducer,
 } from "preact/hooks";
 
 /* aCelery's own components. */
@@ -35,6 +36,14 @@ export {
 } from "./form.js";
 export { Container, Row, Col, Panel, Card } from "./layout.js";
 export { TableMaint, useTableOptions } from "./table_maint.js";
+
+/* Charts are NOT re-exported here. Chart.js is 197 KB raw / 68 KB gzipped —
+   half again the size of this whole module — and most apps never draw one, so
+   it ships as its own entry:
+
+       import { Chart, fromRows } from "acelery/chart.js";
+
+   Same arrangement as the editor: a page pays for it only by asking. */
 export {
   THEMES, applyTheme, currentTheme, isDark, ThemeSelect,
 } from "./theme.js";

@@ -15,12 +15,34 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
+import { registerHooks } from "node:module";
 import { JSDOM } from "jsdom";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "../..");
 const appDir = join(repo, "bundle/www/user/Example");
 const aceleryDir = join(repo, "bundle/www/tools/js/acelery");
+
+/**
+ * The import map, as a resolve hook.
+ *
+ * Rewriting specifiers in the app's own source is not enough: the modules it
+ * imports import each other by bare name too — acelery/chart.js pulls preact
+ * through acelery/ui.js precisely so that only one copy exists at runtime. A
+ * hook resolves the whole graph the way the browser's import map does.
+ */
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier.startsWith("acelery/")) {
+      return {
+        url: pathToFileURL(join(aceleryDir, specifier.slice("acelery/".length)))
+          .href,
+        shortCircuit: true,
+      };
+    }
+    return next(specifier, context);
+  },
+});
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>");
 Object.assign(globalThis, {
@@ -62,13 +84,9 @@ const flush = async () => {
   for (let i = 0; i < 4; i++) await new Promise((r) => setTimeout(r, 0));
 };
 
-/** Imports a user app the way the import map resolves it. */
+/** Imports a user app the way launcher.html does. */
 async function importApp(file) {
-  const source = readFileSync(join(appDir, file), "utf8").replace(
-    /(["'])acelery\/([^"']+)\1/g,
-    (_, q, rest) => `${q}${pathToFileURL(join(aceleryDir, rest)).href}${q}`,
-  );
-  return import(`data:text/javascript,${encodeURIComponent(source)}`);
+  return import(pathToFileURL(join(appDir, file)).href);
 }
 
 const manifest = JSON.parse(
@@ -89,7 +107,7 @@ test("every name the app imports is actually exported", async () => {
   assert.ok(imports.length, "the reference app should import by bare name");
 
   for (const [, names, file] of imports) {
-    const module = await import(pathToFileURL(join(aceleryDir, file)).href);
+    const module = await import(`acelery/${file}`);
     for (const raw of names.split(",")) {
       const name = raw.trim().split(/\s+as\s+/)[0].trim();
       if (!name) continue;
@@ -140,4 +158,68 @@ test("it is written against the new API, not the 2014 globals", async () => {
     assert.ok(!source.includes(old), `${old} should be gone`);
   }
   assert.match(source, /export default function main/);
+});
+
+test("the chart demo is charted from a query, not hand-built data", () => {
+  // fromRows is the step between a result set and a Chart.js config that would
+  // otherwise be written once per app; the reference should show it (§3.8).
+  const source = readFileSync(join(appDir, manifest.entry), "utf8");
+  assert.match(source, /from "acelery\/chart\.js"/);
+  assert.match(source, /fromRows\(/);
+  assert.match(source, /group by/i);
+});
+
+test("charts are imported separately from the widget layer", async () => {
+  // Chart.js is 68 KB gzipped and most apps never draw one, so it must not
+  // arrive through acelery/ui.js.
+  const ui = await import("acelery/ui.js");
+  assert.equal(ui.Chart, undefined, "ui.js must not re-export Chart");
+  const chart = await import("acelery/chart.js");
+  assert.equal(typeof chart.Chart, "function");
+  assert.equal(typeof chart.fromRows, "function");
+});
+
+test("fromRows shapes a result set into Chart.js data", async () => {
+  const { fromRows } = await import("acelery/chart.js");
+  const rows = [
+    { grp: "work", people: 3 },
+    { grp: "family", people: 1 },
+  ];
+  assert.deepEqual(fromRows(rows, "grp", "people"), {
+    labels: ["work", "family"],
+    datasets: [{ label: "people", data: [3, 1] }],
+  });
+
+  // Several series from one query.
+  const wide = [{ month: "Jan", in: 2, out: 5 }];
+  const shaped = fromRows(wide, "month", ["in", "out"]);
+  assert.equal(shaped.datasets.length, 2);
+  assert.deepEqual(shaped.datasets[1], { label: "out", data: [5] });
+});
+
+test("fromRows copes with nulls rather than charting NaN", async () => {
+  const { fromRows } = await import("acelery/chart.js");
+  const shaped = fromRows([{ g: null, n: null }], "g", "n");
+  assert.deepEqual(shaped.labels, [""]);
+  assert.deepEqual(shaped.datasets[0].data, [0]);
+});
+
+test("a chart renders a canvas and cleans up after itself", async () => {
+  // Canvas is not a VDOM: the instance is created against a node the component
+  // owns and destroyed with it, the same arrangement the editor uses.
+  const { html, render } = await import("acelery/ui.js");
+  const { Chart } = await import("acelery/chart.js");
+
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  render(
+    html`<${Chart} type="bar"
+      data=${{ labels: ["a"], datasets: [{ label: "n", data: [1] }] }} />`,
+    host,
+  );
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.ok(host.querySelector("canvas"), "no canvas rendered");
+  render(null, host);
+  assert.equal(host.querySelector("canvas"), null);
 });

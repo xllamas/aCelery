@@ -512,13 +512,13 @@ Measured from this tree.
 | …→ tree-shaken CM6 | 592 KB | ~500 KB | **566 KB** ✅ 4d | ~0 — see below |
 | Dead `css/bootstrap.min.css` | 228 KB | 0 | **reinstated as the theme base** | 0 — §3.4 |
 | CodeMirror demo pages served to the LAN | 89 files | — | **0** ✅ 4a | included above |
-| Font Awesome 6, subset to icons used | 376 KB | ~60 KB | pending 4e | — |
-| Tempus Dominus | 136 KB | 0 | pending 4e | — — §3.9 |
+| Font Awesome 6, subset to icons used | 372 KB | ~60 KB | **2.5 KB** ✅ 4e | **−370 KB** |
+| Tempus Dominus | 136 KB | 0 | **0** ✅ 4e | **−136 KB** — §3.9 |
 | `lazyload.js` | 13 KB | 0 | **0** ✅ 4c.8 | **−13 KB** — §3.2 |
 | xScript widget layer → Preact + htm + react-bootstrap | ~91 KB | ~50 KB | **127 KB** (45 KB gz) ✅ 4c | **+36 KB** — §3.1a |
 | aCelery capability modules (added) | 0 | — | **60 KB** ✅ 4b | **+60 KB** |
-| Chart.js (added) | 0 | 203 KB | pending 4e | — |
-| **Total** | **7.7 MB** | **~1.2 MB** | **2.4 MB so far** | **−5.3 MB so far** |
+| Chart.js (added) | 0 | 203 KB | **197 KB** ✅ 4e | **+197 KB** — §3.8, and opt-in |
+| **Total** | **7.7 MB** | **~1.2 MB** | **2.1 MB** | **−5.6 MB** |
 
 **On CodeMirror 6's size.** §3.7 projected 400–500 KB raw. The measured bundle
 is **566 KB raw / 192 KB gzipped** with four languages — JavaScript, CSS, HTML
@@ -529,7 +529,13 @@ history and line wrapping, none of which CM4 shipped in a working state — Phas
 4a deleted all 51 of its addons precisely because nothing referenced them. The
 2.0 MB saving against the *original* CM4 tree was banked in 4a, not here.
 
-The zipped asset went 1.72 MB → **764 KB**. Phases 4c.8, 4d and 4e still have
+The zipped asset went 1.72 MB → **725 KB**.
+
+**Where the remaining 2.1 MB is:** CodeMirror 566 KB, the 18 theme deltas
+660 KB, Bootstrap 232 KB, Chart.js 197 KB, the widget layer 138 KB, the
+capability modules and IDE ~85 KB. Everything else is under 10 KB. The
+projected ~1.2 MB assumed CM6 at 400–500 KB and themes at ~250 KB; both
+measured higher for reasons §3.4 and §3.7 record. Phases 4c.8, 4d and 4e still have
 Tempus Dominus, Font Awesome, `lazyload.js` and the legacy `xscript*.js` to
 remove, against Chart.js and CM6 to add.
 
@@ -788,10 +794,50 @@ date column has produced invalid SQL since 2014 and cannot ever have worked. It
 is not reachable from the shipped Example app, which is presumably why it
 survived. Parameterised queries make the shape unwritable.
 
-**Phase 4e — additions**
-13. `<Chart>` on Chart.js (§3.8).
-14. Native date inputs; drop Tempus Dominus (§3.9).
+**Phase 4e — additions ✅ done (2026-09-14)**
+13. `<Chart>` on Chart.js (§3.8). ✅ `acelery/chart.js`, **197 KB raw / 68 KB
+    gzipped** — §3.8 projected 203/68. Its own bundle, not part of
+    `acelery/ui.js`: it is half again the size of the whole widget layer and
+    most apps never draw a chart, so an app pays for it by importing it. It
+    takes preact through `acelery/ui.js` rather than embedding a second copy,
+    which the import map resolves to one module at runtime — and usefully makes
+    the mistake *unbuildable*, since dropping `--external` leaves esbuild with
+    a bare specifier it refuses.
+    Ships with `fromRows`, the step between a result set and a Chart.js config
+    that would otherwise be written once per app.
+14. Native date inputs; drop Tempus Dominus (§3.9). ✅ 136 KB gone.
+    `xbDateTimePicker`, `xbDatePicker` and `xbTimePicker` keep their public API
+    on `<input type="date|time|datetime-local">`. Two things necessarily
+    change, because the platform control owns them: `noManual` and the icon
+    argument are accepted and ignored, and `setDisabledDates` becomes a no-op
+    that warns once — min and max are the only restrictions a native picker
+    understands, so an app that calls it degrades to an unrestricted picker
+    rather than throwing. **Still needs the iOS WKWebView check §3.9 asks for.**
 15. Signals, only where a component demonstrably needs them (§3.6).
+    **✅ verified not needed, and not added.** The two places that update per
+    keystroke both already sit behind a boundary: `<Form>` holds field values
+    in its own state, so typing re-renders the form subtree and not the
+    `TableMaint` around it; and the search view's `criteria` does live in
+    `TableMaint`, but the list is not mounted while the search view is. Adding
+    a dependency to solve neither would be exactly what §3.6 warns against.
+
+**Also in 4e — Font Awesome (§5)**
+
+The vendored Font Awesome 6 was 372 KB: a 74 KB stylesheet naming ~2,000 icons,
+plus three webfonts of which the brands (119 KB) and regular (25 KB) families
+were referenced by nothing at all. The product draws **nine** glyphs.
+
+`tool/build_icons.mjs` finds which icons the source actually names, reads their
+codepoints out of Font Awesome's own stylesheet, subsets the solid woff2 to
+exactly those glyphs, and writes a stylesheet with only the rules involved:
+**372 KB → 2.5 KB**, against the ~60 KB §5 projected. The `fa-solid fa-gear`
+idiom is unchanged, so nothing that draws an icon had to know. Font Awesome
+comes from npm, so the 372 KB lives in neither the repo nor the install — the
+same arrangement Bootswatch has for themes.
+
+The icon list is derived from the source rather than hand-written, because an
+icon outside the subset renders as *nothing at all*: a test cross-references
+every `fa-` name in the tree against the generated stylesheet.
 
 **Declined on this revision:** Alpine.js (19 KB measured, no component model,
 least adopted), Lit (Shadow DOM vs Bootstrap), Vue (8–12× the bytes),
@@ -857,8 +903,11 @@ but note its ESM-only JS will need a shim wherever `bootstrap.Modal` /
    only — CM4 carried `php` and `clike` because its mode directory shipped all
    84 modes. Dropped for now; a `.php` file opens with HTML highlighting.
    Restoring either is one import and one entry in `LANGUAGES`.
-9. **Native date pickers or Tempus Dominus?** Better on phones, 136 KB lighter,
-   thinner on desktop. Needs an iOS WKWebView check. Decidable at Phase 4e.
+9. **Native date pickers or Tempus Dominus?** **Native, done in 4e** — 136 KB
+   lighter and the better control on the primary form factor. Verified on
+   Android. **The iOS WKWebView check §3.9 asks for has not been run**, because
+   there is no iOS device in this loop; it is the one piece of Phase 4 taken on
+   the documented behaviour of the platform rather than on a measurement. Decidable at Phase 4e.
 10. **Does the threat model include untrusted app data?** Imported projects,
    `xHTTP` responses, and AI-authored apps all move §7.4 and §3.3's parameterised
    queries from housekeeping to prerequisite. Phase 4b shipped the parameterised

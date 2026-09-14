@@ -390,8 +390,25 @@ Two host-side changes fell out of it, both recorded in `lib/`:
     and nothing else.
 13. The Example app rewritten as the reference it is supposed to be.
 
-**Still open:** 4e (charts, native date inputs, Font Awesome subset). Decisions
-7-10 in `js-ui-framework-evaluation.md` §9 remain, none of which gate anything.
+**Phase 4e — additions ✅ done (2026-09-14)**
+
+14. `<Chart>` on Chart.js, as its own bundle so an app pays for it only by
+    importing it.
+15. Native date inputs; Tempus Dominus deleted (−136 KB).
+16. Font Awesome subset to the nine glyphs the product draws: **372 KB →
+    2.5 KB**.
+17. Signals verified unnecessary and deliberately not added.
+
+**Phase 4 is complete.** The bundle went **7.3 MB → 2.1 MB** expanded and
+1.72 MB → 725 KB zipped, and `assets/aCelery.zip` now contains 70 files against
+the original 690.
+
+**Still open:** decisions 7, 8 and 10 in `js-ui-framework-evaluation.md` §9
+(editor themes, PHP/Java highlighting, the untrusted-data threat model), none of
+which gate anything. One verification is outstanding: §3.9's native date pickers
+have not been checked on iOS WKWebView, because there is no iOS device in this
+loop.
+
 
 `launcher.html` and `errorlog.html` are the last two pages still on the 2014
 library — the launcher deliberately, since it hosts user apps that may be

@@ -83,14 +83,12 @@ void main() {
     test('the new libraries are present', () {
       for (final needed in [
         'js/bootstrap.bundle.min.js',
-        'js/tempus-dominus.min.js',
         'js/xscript_bs5.js',
         'css/bootstrap.min.css',
         'css/themes/acelery.css',
         'css/themes/_dark.css',
-        'css/tempus-dominus.min.css',
-        'fontawesome/css/all.min.css',
-        'fontawesome/webfonts/fa-solid-900.woff2',
+        'icons/icons.css',
+        'icons/icons.woff2',
       ]) {
         expect(File('${tools.path}/$needed').existsSync(), isTrue,
             reason: needed);
@@ -106,10 +104,8 @@ void main() {
         final html = read(page);
         // bootstrap.bundle carries Popper, which Tempus Dominus positions with.
         expect(html, contains('js/bootstrap.bundle.min.js'), reason: page.path);
-        expect(html, contains('js/tempus-dominus.min.js'), reason: page.path);
         expect(html, contains('js/xscript_bs5.js'), reason: page.path);
-        expect(html, contains('fontawesome/css/all.min.css'), reason: page.path);
-        expect(html, contains('css/tempus-dominus.min.css'), reason: page.path);
+        expect(html, contains('icons/icons.css'), reason: page.path);
       }
     });
 
@@ -817,6 +813,120 @@ void main() {
     });
   });
 
+  group('Phase 4e — what was added and what left', () {
+    final acelery = Directory('bundle/www/tools/js/acelery');
+
+    test('Tempus Dominus is gone and the pickers use the platform', () {
+      // 136 KB of JavaScript and CSS for three widgets, plus a dependency on
+      // Popper and on Font Awesome's chevrons. Both target runtimes render the
+      // OS picker for <input type=date> (§3.9).
+      expect(File('${tools.path}/js/tempus-dominus.min.js').existsSync(), isFalse);
+      expect(File('${tools.path}/css/tempus-dominus.min.css').existsSync(), isFalse);
+      for (final page in pages) {
+        expect(read(page), isNot(contains('tempus')), reason: page.path);
+      }
+
+      final lib = read(File('${tools.path}/js/xscript_bs5.js'));
+      expect(lib, isNot(contains('TempusDominus')));
+      expect(lib, isNot(contains('tempusDominus')));
+      // And the three pickers still exist, on native inputs.
+      for (final picker in [
+        'function xbDateTimePicker',
+        'function xbDatePicker',
+        'function xbTimePicker',
+      ]) {
+        expect(lib, contains(picker), reason: picker);
+      }
+      expect(lib, contains('this.inputType = "date"'));
+      expect(lib, contains('this.inputType = "time"'));
+    });
+
+    test('the pickers keep the API an app was written against', () {
+      // setDisabledDates has no native equivalent, so it stays as a no-op that
+      // says so — an app that calls it gets an unrestricted picker rather than
+      // a thrown error.
+      final lib = read(File('${tools.path}/js/xscript_bs5.js'));
+      for (final method in [
+        'xbDateTimePicker.prototype.setMinDate',
+        'xbDateTimePicker.prototype.setMaxDate',
+        'xbDateTimePicker.prototype.setDisabledDates',
+        'xbDateTimePicker.prototype.getValue',
+        'xbDateTimePicker.prototype.setValue',
+        'xbDateTimePicker.prototype.run',
+        'xbDateTimePicker.prototype.destroy',
+      ]) {
+        expect(lib, contains(method), reason: method);
+      }
+    });
+
+    test('Font Awesome is subset to the glyphs actually drawn', () {
+      // 372 KB of stylesheet and three webfonts, two of which nothing
+      // referenced, for nine icons (§5).
+      expect(Directory('${tools.path}/fontawesome').existsSync(), isFalse);
+
+      final css = File('${tools.path}/icons/icons.css');
+      final font = File('${tools.path}/icons/icons.woff2');
+      expect(css.existsSync(), isTrue, reason: 'run tool/build_icons.mjs');
+      expect(font.lengthSync(), lessThan(16 * 1024),
+          reason: '${font.lengthSync()} bytes — a subset, not a family');
+    });
+
+    test('every icon the source names is in the subset', () {
+      // An icon outside the subset renders as nothing at all, so this is the
+      // check that keeps that from shipping.
+      final css = File('${tools.path}/icons/icons.css').readAsStringSync();
+      final named = <String>{};
+      for (final dir in ['bundle/www/system', 'bundle/www/user', 'web/src']) {
+        for (final file in Directory(dir)
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((f) => const ['.js', '.html', '.css']
+                .contains(f.path.substring(f.path.lastIndexOf('.'))))) {
+          for (final m
+              in RegExp(r'fa-([a-z0-9-]+)').allMatches(file.readAsStringSync())) {
+            final name = m.group(1)!;
+            if (['solid', 'regular', 'brands'].contains(name)) continue;
+            named.add(name);
+          }
+        }
+      }
+      expect(named, isNotEmpty);
+      for (final icon in named) {
+        expect(css, contains('.fa-$icon '), reason: icon);
+      }
+    });
+
+    test('charts ship separately from the widget layer', () {
+      // Chart.js is 68 KB gzipped and most apps never draw one (§3.8).
+      expect(File('${acelery.path}/chart.js').existsSync(), isTrue);
+      final ui = File('${acelery.path}/ui.js').readAsStringSync();
+      expect(ui, isNot(contains('chart.js')));
+      expect(ui, isNot(contains('Chart.js')));
+    });
+
+    test('only one bundle embeds preact', () {
+      // Two copies means the hooks in one file register on a different
+      // instance than the one rendering (§3.1a). chart.js imports preact
+      // through the bare specifier "acelery/ui.js", so the import map resolves
+      // one copy at runtime — and dropping --external makes the build fail
+      // outright rather than quietly embed a second.
+      final chart = File('${acelery.path}/chart.js').readAsStringSync();
+      expect(chart, contains('acelery/ui.js'),
+          reason: 'chart.js must import preact through ui.js');
+
+      final info = jsonDecode(
+        File('${acelery.path}/.build-info.json').readAsStringSync(),
+      ) as Map<String, Object?>;
+      expect(info['preactCores'], 1);
+    });
+
+    test('the chart bundle stays within the budget §3.8 measured', () {
+      final chart = File('${acelery.path}/chart.js');
+      expect(chart.lengthSync(), lessThan(260 * 1024),
+          reason: '${chart.lengthSync()} bytes — §3.8 measured ~203 KB raw');
+    });
+  });
+
   group('the built zip matches the source tree', () {
     test('assets/aCelery.zip is not stale', () {
       // tool/build_bundle.sh packs bundle/ into the asset; a forgotten rebuild
@@ -833,6 +943,9 @@ void main() {
       expect(listing, isNot(contains('js/lazyload.js')));
       // Phase 4a's pruning has to reach the device, not just the source tree.
       expect(listing, isNot(contains('tools/codemirror/')));
+      expect(listing, isNot(contains('tempus-dominus')));
+      expect(listing, isNot(contains('tools/fontawesome/')));
+      expect(listing, contains('aCelery/www/tools/icons/icons.woff2'));
       expect(listing, contains('aCelery/www/tools/js/acelery/editor.js'));
       // Phase 4c reinstated tools/css/bootstrap.min.css as the single base
       // stylesheet; what must not come back is the 18-theme directory.
