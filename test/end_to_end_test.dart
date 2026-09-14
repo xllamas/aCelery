@@ -83,12 +83,14 @@ void main() {
       }
     });
 
-    test('xscript.js is served and still takes the HTTP bridge path', () async {
+    test('xscript.js is served and takes the HTTP bridge path', () async {
       final js = await http.get(Uri.parse('$origin/tools/js/xscript.js'));
       expect(js.statusCode, 200);
-      // The port depends on this fallback existing; see plan §2.
+      // The port depends on this transport; see plan §2.
       expect(js.body, contains('/android.itf?'));
-      expect(js.body, contains(r'typeof Android != "undefined"'));
+      // And on there being no other one: the in-WebView branch was dead code
+      // from Phase 2 onward and is gone (evaluation §1.4).
+      expect(js.body, isNot(contains('Android')));
     });
 
     test('a path outside the document root is not served', () async {

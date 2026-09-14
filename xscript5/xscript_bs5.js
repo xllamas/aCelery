@@ -1081,9 +1081,34 @@ xbNavBar.prototype.getNavItem = function(index){
    return this.elements[index];
 }
 
-xbNavBar.prototype.setTitle = function(title){
+/* The Bootstrap 3 library exposed the brand as `this.navA`, an xLink, and the
+   IDE set its innerHTML directly. xscript5 keeps the brand private and offers
+   this instead, so the same block-in-an-anchor and escaping problems as
+   addTitleWrapper apply here and are handled the same way:
+
+     nav.setTitle("aCelery Project: " + name, "h4")
+
+   `wrapper` is optional; h1-h6 render as a span carrying Bootstrap's matching
+   .h1-.h6 class rather than a real heading, which keeps the typography without
+   putting a block box inside the anchor. The title is set as text, so a project
+   name containing a "<" stays a project name. */
+
+xbNavBar.prototype.setTitle = function(title,wrapper){
    var brand = this.node.querySelector(".navbar-brand");
-   if (brand) brand.innerHTML = title;
+   if (!brand) return this;
+
+   brand.textContent = "";
+   if (wrapper){
+      var isHeading = /^h[1-6]$/i.test(wrapper);
+      var el = document.createElement(isHeading ? "span" : wrapper);
+      if (isHeading)
+         el.className = wrapper.toLowerCase() + " mb-0";
+      el.textContent = title;
+      brand.appendChild(el);
+   }
+   else
+      brand.textContent = title;
+
    return this;
 }
 
@@ -1124,13 +1149,31 @@ xbNavBarDropdown.prototype.getToggle = function(){
    return this.node.querySelector("a.dropdown-toggle");
 }
 
-/* Restored: the IDE wraps its dropdown titles in an <h4>. */
+/* Restored: the IDE wraps its dropdown titles in an <h4>.
+
+   A real <h4> is a block element, and an inline <a> containing one is split
+   into anonymous blocks: the heading's text then sits outside the anchor's own
+   hit area, so only Bootstrap's ::after caret stays clickable, on a line of its
+   own. That was invisible in quirks mode and appeared the moment the pages got
+   a doctype (evaluation §7.1). Bootstrap 5 ships .h1-.h6 for exactly this --
+   heading typography without a heading box -- so the wrapper becomes a span
+   carrying the class. It looks the same and the whole title is clickable.
+
+   The title is set as text rather than markup, so a title containing a "<"
+   is a title rather than an element (§7.4). */
 
 xbNavBarDropdown.prototype.addTitleWrapper = function(w){
    this.titleWrapper = w;
    var a = this.getToggle();
-   if (a)
-      a.innerHTML = "<" + w + ">" + this.title + "</" + w + ">";
+   if (a){
+      var isHeading = /^h[1-6]$/i.test(w);
+      var span = document.createElement(isHeading ? "span" : w);
+      if (isHeading)
+         span.className = w.toLowerCase() + " mb-0";
+      span.textContent = this.title;
+      a.textContent = "";
+      a.appendChild(span);
+   }
    return this;
 }
 

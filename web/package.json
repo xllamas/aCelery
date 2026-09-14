@@ -1,0 +1,14 @@
+{
+  "name": "acelery-web",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Source for the vendored modules under bundle/www/tools/js/. Built by tool/build_js.sh; the build output is committed, so a checkout without node still packs a working bundle.",
+  "type": "module",
+  "scripts": {
+    "build": "../tool/build_js.sh",
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

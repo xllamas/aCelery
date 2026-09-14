@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../../web/src/acelery/index.js"],
+  "sourcesContent": ["/**\n * The aCelery capability API.\n *\n * Apps import from the bare name, which the import map in launcher.html\n * resolves to this directory:\n *\n *     import { openDB } from \"acelery/sql.js\";\n *     import * as acelery from \"acelery\";\n *\n * Namespaced rather than flattened, because `file.open` and `http.get` would\n * otherwise collide with each other and with anything an app defines.\n */\n\nexport * as sql from \"./sql.js\";\nexport * as file from \"./file.js\";\nexport * as http from \"./http.js\";\nexport * as exports from \"./export.js\";\nexport { BridgeError } from \"./bridge.js\";\n"],
+  "mappings": "AAaA,YAAY,SAAS;AACrB,YAAY,UAAU;AACtB,YAAY,UAAU;AACtB,YAAY,aAAa;AACzB,SAAS,mBAAmB;",
+  "names": []
+}

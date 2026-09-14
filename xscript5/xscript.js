@@ -1465,166 +1465,103 @@ xSQL.prototype = new xInterface();
 xSQL.prototype.openDB = function(path, basePath){
    var resObj;
 
-   if (typeof Android != "undefined"){
-      this.dbHandle = Android.xSqlOpen(path,basePath || "");
-   }
-   else{
-      var q = "opt=sql&action=opendb" +
-              "&path=" + encodeURIComponent(path) +
-              "&bpath=" + encodeURIComponent(basePath || "");
-      resObj = this.getRemoteInterface(q);
-      this.dbHandle = resObj.handle
-   }
+   var q = "opt=sql&action=opendb" +
+           "&path=" + encodeURIComponent(path) +
+           "&bpath=" + encodeURIComponent(basePath || "");
+   resObj = this.getRemoteInterface(q);
+   this.dbHandle = resObj.handle
+
    return this.dbhandle;
 }
 
 xSQL.prototype.sqlExec = function(q){
-   if (typeof Android != "undefined"){
-      Android.xSqlExec(this.dbHandle,q);
-   }
-   else{
-      var q = "opt=sql&action=exec" +
-              "&handle=" + this.dbHandle +
-              "&query=" + btoa(q);
-      this.getRemoteInterface(q);
-   }
+   var q = "opt=sql&action=exec" +
+           "&handle=" + this.dbHandle +
+           "&query=" + btoa(q);
+   this.getRemoteInterface(q);
 }
 
 xSQL.prototype.sqlInsert = function(q){
    var resObj;
 
-   if (typeof Android != "undefined"){
-      return Android.xSqlInsert(this.dbHandle,q);
-   }
-   else{
-      var q = "opt=sql&action=insert" +
-              "&handle=" + this.dbHandle +
-              "&query=" + btoa(q);
-      resObj = this.getRemoteInterface(q);
-      return resObj.rowid;
-   }
+   var q = "opt=sql&action=insert" +
+           "&handle=" + this.dbHandle +
+           "&query=" + btoa(q);
+   resObj = this.getRemoteInterface(q);
+   return resObj.rowid;
 }
 
 xSQL.prototype.sqlSelect = function(q){
    var resObj;
 
-   if (typeof Android != "undefined"){
-      this.cursor = Android.xSqlSelect(this.dbHandle,q);
-   }
-   else{
-      var q = "opt=sql&action=select" +
-              "&handle=" + this.dbHandle +
-              "&query=" + btoa(q);
-      resObj = this.getRemoteInterface(q);
-      this.cursor = resObj.cursor;
-   }
+   var q = "opt=sql&action=select" +
+           "&handle=" + this.dbHandle +
+           "&query=" + btoa(q);
+   resObj = this.getRemoteInterface(q);
+   this.cursor = resObj.cursor;
+
    return this.cursor;
 }
 
 xSQL.prototype.getRowCount = function(){
    var resObj;
 
-   if (typeof Android != "undefined"){
-      var rowcnt = Android.xSqlGetRowCount(this.cursor);
-      return rowcnt;
-   }
-   else{
-      var q = "opt=sql&action=getrowcount" +
-              "&cursor=" + this.cursor;
-      resObj = this.getRemoteInterface(q);
-      return resObj.rowcount;
-   }
+   var q = "opt=sql&action=getrowcount" +
+           "&cursor=" + this.cursor;
+   resObj = this.getRemoteInterface(q);
+   return resObj.rowcount;
 }
 
 xSQL.prototype.gotoLastRow = function(){
    var resObj;
 
-   if (typeof Android != "undefined"){
-      var rowcnt = Android.xSqlGotoLastRow(this.cursor);
-      return rowcnt;
-   }
-   else{
-      var q = "opt=sql&action=gotolastrow" +
-              "&cursor=" + this.cursor;
-      resObj = this.getRemoteInterface(q);
-      return resObj.rowcount;
-   }
+   var q = "opt=sql&action=gotolastrow" +
+           "&cursor=" + this.cursor;
+   resObj = this.getRemoteInterface(q);
+   return resObj.rowcount;
 }
 
 xSQL.prototype.getNextRow = function(){
    var resObj;
 
-   if (typeof Android != "undefined"){
-      var row = Android.xSqlGetNextRow(this.cursor);
-      if (!row)
-         return false;
-      resObj = JSON.parse(row);
-      return resObj
-   }
-   else{
-      var q = "opt=sql&action=getnextrow" +
-              "&cursor=" + this.cursor;
-      resObj = this.getRemoteInterface(q);
-      if (Object.keys(resObj).length == 0)
-         return false;
-      else
-         return resObj;
-   }
+   var q = "opt=sql&action=getnextrow" +
+           "&cursor=" + this.cursor;
+   resObj = this.getRemoteInterface(q);
+   if (Object.keys(resObj).length == 0)
+      return false;
+   else
+      return resObj;
 }
 
 xSQL.prototype.getPrevRow = function(){
    var resObj;
 
-   if (typeof Android != "undefined"){
-      var row = Android.xSqlGetPrevRow(this.cursor);
-      if (!row)
-         return false;
-      resObj = JSON.parse(row);
-      return resObj
-   }
-   else{
-      var q = "opt=sql&action=getprevrow" +
-              "&cursor=" + this.cursor;
-      resObj = this.getRemoteInterface(q);
-      if (Object.keys(resObj).length == 0)
-         return false;
-      else
-         return resObj;
-   }
+   var q = "opt=sql&action=getprevrow" +
+           "&cursor=" + this.cursor;
+   resObj = this.getRemoteInterface(q);
+   if (Object.keys(resObj).length == 0)
+      return false;
+   else
+      return resObj;
 }
 
 xSQL.prototype.closeCursor = function(){
-   if (typeof Android != "undefined"){
-      Android.xSqlCloseCursor(this.cursor);
-   }
-   else{
-      var q = "opt=sql&action=closecursor" +
-              "&cursor=" + this.cursor;
-      this.getRemoteInterface(q);
-   }
+   var q = "opt=sql&action=closecursor" +
+           "&cursor=" + this.cursor;
+   this.getRemoteInterface(q);
 }
 
 xSQL.prototype.closeDB = function(){
-   if (typeof Android != "undefined"){
-      Android.xSqlClose(this.dbHandle);
-   }
-   else{
-      var q = "opt=sql&action=closedb" +
-              "&handle=" + this.dbHandle;
-      this.getRemoteInterface(q);
-   }
+   var q = "opt=sql&action=closedb" +
+           "&handle=" + this.dbHandle;
+   this.getRemoteInterface(q);
 }
 
 xSQL.prototype.deleteDB = function (path, basePath){
-   if (typeof Android != "undefined"){
-      Android.xSqlDeleteDatabase(path,basePath || "");
-   }
-   else{
-      var q = "opt=sql&action=deletedb" +
-              "&path=" + encodeURIComponent(path) +
-              "&bpath=" + encodeURIComponent(basePath || "");
-      this.getRemoteInterface(q);
-   }
+   var q = "opt=sql&action=deletedb" +
+           "&path=" + encodeURIComponent(path) +
+           "&bpath=" + encodeURIComponent(basePath || "");
+   this.getRemoteInterface(q);
 }
 
 
@@ -1641,99 +1578,60 @@ xFile.prototype = new xInterface();
 xFile.prototype.open = function(path, basePath){
    var resObj;
 
-   if (typeof Android != "undefined"){
-      this.fileHandle = Android.xFileOpen(path,basePath || "");
-   }
-   else{
-      var q = "opt=file&action=openfile" +
-              "&path=" + encodeURIComponent(path) +
-              "&bpath=" + encodeURIComponent(basePath || "");
-      resObj = this.getRemoteInterface(q);
-      this.fileHandle = resObj.handle;
-   }
+   var q = "opt=file&action=openfile" +
+           "&path=" + encodeURIComponent(path) +
+           "&bpath=" + encodeURIComponent(basePath || "");
+   resObj = this.getRemoteInterface(q);
+   this.fileHandle = resObj.handle;
+
    return this.fileHandle;
 }
 
 xFile.prototype.listFiles = function(path, basePath){
    var resObj;
 
-   if (typeof Android != "undefined"){
-      var filelist = Android.xListFiles(path,basePath);
-      if (!filelist)
-         return false;
-      resObj = JSON.parse(filelist);
+   var q = "opt=file&action=listfiles" +
+           "&path=" + encodeURIComponent(path) +
+           "&bpath=" + encodeURIComponent(basePath || "");
+   resObj = this.getRemoteInterface(q);
+   if (Object.keys(resObj).length == 0)
+      return false;
+   else
       return resObj;
-   }
-   else{
-      var q = "opt=file&action=listfiles" +
-              "&path=" + encodeURIComponent(path) +
-              "&bpath=" + encodeURIComponent(basePath || "");
-      resObj = this.getRemoteInterface(q);
-      if (Object.keys(resObj).length == 0)
-         return false;
-      else
-         return resObj;
-   }
 }
 
 xFile.prototype.mkDir = function(path, basePath){
-   if (typeof Android != "undefined"){
-      Android.xFileMkDir(path,basePath || "");
-   }
-   else{
-      var q = "opt=file&action=mkdir" +
-              "&path=" + encodeURIComponent(path) +
-              "&bpath=" + encodeURIComponent(basePath || "");
-      this.getRemoteInterface(q);
-   }
+   var q = "opt=file&action=mkdir" +
+           "&path=" + encodeURIComponent(path) +
+           "&bpath=" + encodeURIComponent(basePath || "");
+   this.getRemoteInterface(q);
 }
 
 xFile.prototype.getExtStoragePath = function(){
-   if (typeof Android != "undefined"){
-      return Android.xGetExternalStoragePath();
-   }
-   else{
-      var q = "opt=file&action=getextpath";
-      resObj = this.getRemoteInterface(q);
-      return resObj.extpath;
-   }
+   var q = "opt=file&action=getextpath";
+   resObj = this.getRemoteInterface(q);
+   return resObj.extpath;
 }
 
 xFile.prototype.close = function(){
-   if (typeof Android != "undefined"){
-      Android.xFileClose(this.fileHandle);
-   }
-   else{
-      var q = "opt=file&action=closefile" +
-              "&handle=" + this.fileHandle;
-      this.getRemoteInterface(q);
-   }
+   var q = "opt=file&action=closefile" +
+           "&handle=" + this.fileHandle;
+   this.getRemoteInterface(q);
 }
 
 xFile.prototype.deleteFile = function(){
-   if (typeof Android != "undefined"){
-      Android.xFileDelete(this.fileHandle);
-   }
-   else{
-      var q = "opt=file&action=deletefile" +
-              "&handle=" + this.fileHandle;
-      this.getRemoteInterface(q);
-   }
+   var q = "opt=file&action=deletefile" +
+           "&handle=" + this.fileHandle;
+   this.getRemoteInterface(q);
 }
 
 xFile.prototype.read = function(){
    var data;
 
-   if (typeof Android != "undefined"){
-      var data = Android.xFileRead(this.fileHandle);
-      return data;
-   }
-   else{
-      var q = "opt=file&action=fileread" +
-              "&handle=" + this.fileHandle;
-      data = this.rawRemoteInterface(q);
-      return data;
-   }
+   var q = "opt=file&action=fileread" +
+           "&handle=" + this.fileHandle;
+   data = this.rawRemoteInterface(q);
+   return data;
 }
 
 xFile.prototype.write = function(data,append){
@@ -1743,15 +1641,10 @@ xFile.prototype.write = function(data,append){
       ap = "true";
    else
       ap = "false";
-   if (typeof Android != "undefined"){
-      Android.xFileWrite(this.fileHandle,data,ap);
-   }
-   else{
-      var q = "opt=file&action=filewrite" +
-              "&append=" + ap +
-              "&handle=" + this.fileHandle;
-      this.postRemoteInterface(q,data);
-   }
+   var q = "opt=file&action=filewrite" +
+           "&append=" + ap +
+           "&handle=" + this.fileHandle;
+   this.postRemoteInterface(q,data);
 }
 
 /*          Export File Interface         */
@@ -1776,10 +1669,8 @@ xExportFile.prototype.set = function(mime,fname,data){
 xExportFile.prototype.get = function(){
    var form = document.createElement("form");
 
-   if (typeof Android != "undefined")
-      form.action = this.baseURL + "opt=export&action=getwv&handle=" + this.handle;
-   else
-      form.action = this.baseURL + "opt=export&action=get&handle=" + this.handle;
+   form.action = this.baseURL + "opt=export&action=get&handle=" + this.handle;
+
    form.method = "POST";
    document.body.appendChild(form);
    form.submit();
@@ -1815,37 +1706,24 @@ function xImportProject(){
 xImportProject.prototype = new xInterface();
 
 xImportProject.prototype.get = function(){
-   if (typeof Android != "undefined"){
-      Android.xSelectImportProjectFile();
-   }
-   else{
-   }
+   /* Importing needs the host's file picker; the shell's shim overrides this.
+      In a plain browser there is nothing to open, which is what the removed
+      in-WebView branch's empty else branch also meant. */
 }
 
 
 /*           Dialog Interface             */
 
 function xAlertDialog(title,msg){
-   if (typeof Android != "undefined"){
-      Android.xAlertDialog(title,msg);
-   }
-   else{
-      alert(title + "\n" + msg);
-   }
+   alert(title + "\n" + msg);
 }
 
 /*          Run user app Interface      */
 
 function xRunUserApp(title,app,debug){
    var url;
-   if (typeof Android != "undefined"){
-      url = "http://localhost:8123/system/launcher.html?app=" + encodeURIComponent(app);
-      Android.xRunUrl(title,url,debug);
-   }
-   else{
-      url = "/system/launcher.html?app=" + app;
-      window.open(url,"_blank");
-   }
+   url = "/system/launcher.html?app=" + app;
+   window.open(url,"_blank");
 }
 
 /*          HTTP Interface          */
@@ -1859,43 +1737,26 @@ xHTTP.prototype = new xInterface();
 xHTTP.prototype.get = function(url){
    var data;
 
-   if (typeof Android != "undefined"){
-      var data = Android.xHTTPGet(url);
-      return data;
-   }
-   else{
-      var q = "opt=http&action=get" +
-              "&url=" + encodeURIComponent(url);
-      data = this.rawRemoteInterface(q);
-      return data;
-   }
+   var q = "opt=http&action=get" +
+           "&url=" + encodeURIComponent(url);
+   data = this.rawRemoteInterface(q);
+   return data;
 }
 
 xHTTP.prototype.post = function(url,pdata){
    var data;
 
-   if (typeof Android != "undefined"){
-      var data = Android.xHTTPPost(url,pdata);
-      return data;
-   }
-   else{
-      var q = "opt=http&action=get" +
-              "&url=" + encodeURIComponent(url);
-      data = this.rawPostRemoteInterface(q,pdata);
-      return data;
-   }
+   var q = "opt=http&action=get" +
+           "&url=" + encodeURIComponent(url);
+   data = this.rawPostRemoteInterface(q,pdata);
+   return data;
 }
 
 /*          Close App             */
 
 function xCloseApp(){
    var url;
-   if (typeof Android != "undefined"){
-      Android.xFinish();
-   }
-   else{
-      window.close();
-   }
+   window.close();
 }
 
 
@@ -1903,23 +1764,14 @@ function xCloseApp(){
 /*          Error Log Interface          */
 
 function xGetLogCat(level){
-   if (typeof Android != "undefined"){
-      return Android.xGetLogCat(level);
-   }
    return "";
 }
 
 function xGetLogCatFormated(clss,level){
-   if (typeof Android != "undefined"){
-      return Android.xGetLogCatFormated(clss,level);
-   }
    return "";
 }
 
 function xClearLogCat(){
-   if (typeof Android != "undefined"){
-      return Android.xClearLogCat();
-   }
 }
 
 /*         Functions                    */

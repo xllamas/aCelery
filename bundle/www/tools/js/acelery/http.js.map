@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../../web/src/acelery/http.js"],
+  "sourcesContent": ["/**\n * Outbound HTTP, proxied through the host.\n *\n * The WebView's own `fetch` is bound by the page's origin and by the\n * cleartext policy that permits only localhost; the host has neither\n * restriction, so app authors reach the network through here.\n */\n\nimport { getText, postText } from \"./bridge.js\";\n\n/** @returns {Promise<string>} the response body, unparsed */\nexport function get(url) {\n  return getText({ opt: \"http\", action: \"get\", url });\n}\n\n/**\n * @param {string} url\n * @param {string} data form-encoded body\n * @returns {Promise<string>} the response body, unparsed\n */\nexport function post(url, data) {\n  return postText({ opt: \"http\", action: \"post\", url }, data);\n}\n\n/** Convenience: GET and parse. Throws if the body is not JSON. */\nexport async function getJson(url) {\n  return JSON.parse(await get(url));\n}\n"],
+  "mappings": "AAQA,SAAS,SAAS,gBAAgB;AAG3B,SAAS,IAAI,KAAK;AACvB,SAAO,QAAQ,EAAE,KAAK,QAAQ,QAAQ,OAAO,IAAI,CAAC;AACpD;AAOO,SAAS,KAAK,KAAK,MAAM;AAC9B,SAAO,SAAS,EAAE,KAAK,QAAQ,QAAQ,QAAQ,IAAI,GAAG,IAAI;AAC5D;AAGA,eAAsB,QAAQ,KAAK;AACjC,SAAO,KAAK,MAAM,MAAM,IAAI,GAAG,CAAC;AAClC;",
+  "names": []
+}

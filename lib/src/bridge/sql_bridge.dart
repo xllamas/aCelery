@@ -66,7 +66,22 @@ class SqlCursor {
   }
 }
 
-/// Implements the eleven `opt=sql` routes of `/android.itf`.
+/// A SQL statement the database refused.
+///
+/// The cursor routes swallow errors and return -1, because that is what
+/// `aCeleryAndroidInterface` did. The async routes report them instead: an app
+/// author debugging a typo in a WHERE clause should see the message, not an
+/// empty list.
+class SqlError implements Exception {
+  SqlError(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Implements the `opt=sql` routes of `/android.itf`.
 class SqlBridge {
   SqlBridge({required this.paths, required this.factory});
 
@@ -134,6 +149,79 @@ class SqlBridge {
       return -1;
     }
   }
+
+  // ------------------------------------------------- Phase 4b: the async API
+  //
+  // The cursor protocol above exists to mimic android.database.Cursor, and it
+  // costs one HTTP round-trip per row. sqflite already materialises the whole
+  // result, so these three return it in one call and take bound parameters
+  // instead of concatenated SQL. See doc/js-ui-framework-evaluation.md §3.3.
+  //
+  // Unlike the cursor routes these do not stringify: a column comes back as
+  // the JSON type sqflite gave it, so an INTEGER stays a number and NULL stays
+  // null. Nothing depends on the old coercion here — it was the Cursor
+  // contract, and the cursor is what these replace.
+
+  /// Runs a SELECT and returns every row. Throws [SqlError] on a bad
+  /// statement, so the caller sees the message rather than an empty result.
+  Future<List<Map<String, Object?>>> query(
+    int handle,
+    String sql, [
+    List<Object?> args = const [],
+  ]) async {
+    final db = _requireDb(handle);
+    try {
+      return await db.rawQuery(sql, _bind(args));
+    } on DatabaseException catch (e) {
+      throw SqlError('$e');
+    }
+  }
+
+  /// Runs a statement that returns no rows; yields the number of rows changed.
+  Future<int> run(
+    int handle,
+    String sql, [
+    List<Object?> args = const [],
+  ]) async {
+    final db = _requireDb(handle);
+    try {
+      return await db.rawUpdate(sql, _bind(args));
+    } on DatabaseException catch (e) {
+      throw SqlError('$e');
+    }
+  }
+
+  /// Runs an INSERT; yields the new rowid.
+  Future<int> insertRow(
+    int handle,
+    String sql, [
+    List<Object?> args = const [],
+  ]) async {
+    final db = _requireDb(handle);
+    try {
+      return await db.rawInsert(sql, _bind(args));
+    } on DatabaseException catch (e) {
+      throw SqlError('$e');
+    }
+  }
+
+  Database _requireDb(int handle) {
+    final db = _databases[handle];
+    if (db == null) throw SqlError('no open database with handle $handle');
+    return db;
+  }
+
+  /// JSON gives us bool, which sqflite does not bind; SQLite has no boolean
+  /// type either, so they go in as 0/1 exactly as SQLite stores them.
+  static List<Object?> _bind(List<Object?> args) => [
+        for (final a in args)
+          switch (a) {
+            bool b => b ? 1 : 0,
+            _ => a,
+          },
+      ];
+
+  // ------------------------------------------------- the cursor API (legacy)
 
   int rowCount(int cursor) => _cursors[cursor]?.rowCount ?? -1;
 

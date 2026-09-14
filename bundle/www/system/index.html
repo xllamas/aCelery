@@ -1,6 +1,8 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" type="text/css" href="/tools/css/bootstrap_themes/acelery/bootstrap.min.css" />
 <link rel="stylesheet" type="text/css" href="/tools/fontawesome/css/all.min.css" />
 <link rel="stylesheet" type="text/css" href="/tools/css/tempus-dominus.min.css" />
@@ -145,7 +147,7 @@ function createProject(iName,iDesc){
 
 function openProject(project){
    currentProject = project;
-   navBar.navA.node.innerHTML = "<h4>aCelery Project: " + project + "</h4>";
+   navBar.setTitle("aCelery Project: " + project,"h4");
    var e = ideLayout.getElement(1,0);
    if (e)
       e.remove();
@@ -157,7 +159,7 @@ function closeProject(){
    currentProject = "";
    currentFile = "";
    hasFileChanged = false;
-   navBar.navA.node.innerHTML = "<h4>aCelery IDE</h4>";
+   navBar.setTitle("aCelery IDE","h4");
    var e = ideLayout.getElement(1,0);
    if (e)
       e.remove();
@@ -553,7 +555,7 @@ function openDb(db){
    currentDb = new xSQL();
    currentDb.openDB(db);
    currentDbName = db;
-   navBar.navA.node.innerHTML = "<h4>DB Manager: " + db + "</h4>";
+   navBar.setTitle("DB Manager: " + db,"h4");
    var e = dbLayout.getElement(1,0);
    if (e)
       e.remove();
@@ -579,7 +581,7 @@ function closeDb(){
       currentDb.closeDB();
       currentDb = null;
       currentDbName = ""
-      navBar.navA.node.innerHTML = "<h4>DB Manager</h4>";
+      navBar.setTitle("DB Manager","h4");
       var e = dbLayout.getElement(1,0);
       if (e)
          e.remove();

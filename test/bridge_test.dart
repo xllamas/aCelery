@@ -38,6 +38,21 @@ void main() {
   Future<http.Response> post(String query, String body) =>
       http.post(itf.replace(query: query), body: body);
 
+  /// Mirrors the Phase 4b async bridge: POST a JSON body, get JSON back.
+  Future<http.Response> postJson(String query, Map<String, Object?> body) =>
+      http.post(
+        itf.replace(query: query),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      );
+
+  Future<Map<String, dynamic>> callJson(
+      String query, Map<String, Object?> body) async {
+    final response = await postJson(query, body);
+    expect(response.statusCode, 200, reason: '$query ${response.body}');
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   /// xScript base64-encodes SQL with `btoa()`.
   String enc(String sql) => base64.encode(utf8.encode(sql));
 
@@ -142,6 +157,158 @@ void main() {
       final response = await raw('opt=sql&action=select&handle=$handle'
           '&query=${enc('select * from nope')}');
       expect(response.statusCode, 500);
+    });
+  });
+
+  group('opt=sql — the Phase 4b async routes', () {
+    // These replace the cursor protocol: one round-trip per statement instead
+    // of one per row, and bound parameters instead of concatenated SQL.
+    // See doc/js-ui-framework-evaluation.md §3.3.
+
+    Future<String> openDb() async =>
+        (await get('opt=sql&action=opendb&path=async.db'))['handle'] as String;
+
+    test('query returns the whole result set in one call', () async {
+      final handle = await openDb();
+      await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'create table person (mname text, age integer)',
+      });
+      for (final (name, age) in [('Ada', 36), ('Grace', 45), ('Alan', 41)]) {
+        await callJson('opt=sql&action=insertrow', {
+          'handle': handle,
+          'sql': 'insert into person values (?, ?)',
+          'args': [name, age],
+        });
+      }
+
+      final rows = (await callJson('opt=sql&action=query', {
+        'handle': handle,
+        'sql': 'select * from person order by mname',
+      }))['rows'] as List;
+
+      expect(rows, hasLength(3));
+      expect(rows.map((r) => r['mname']), ['Ada', 'Alan', 'Grace']);
+    });
+
+    test('columns keep their SQLite types', () async {
+      // The cursor routes stringify every column because android.database
+      // .Cursor did. Nothing carries that contract into the async API.
+      final handle = await openDb();
+      await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'create table t (n integer, x real, s text, z text)',
+      });
+      await callJson('opt=sql&action=insertrow', {
+        'handle': handle,
+        'sql': 'insert into t values (?, ?, ?, ?)',
+        'args': [7, 1.5, 'seven', null],
+      });
+
+      final rows = (await callJson(
+          'opt=sql&action=query', {'handle': handle, 'sql': 'select * from t'}))['rows'] as List;
+      expect(rows.single['n'], 7);
+      expect(rows.single['x'], 1.5);
+      expect(rows.single['s'], 'seven');
+      expect(rows.single['z'], isNull);
+    });
+
+    test('arguments are bound, not interpolated', () async {
+      // The whole point of the route: a value containing a quote is data.
+      final handle = await openDb();
+      await callJson('opt=sql&action=run',
+          {'handle': handle, 'sql': 'create table t (v text)'});
+
+      const nasty = "Robert'); drop table t;--";
+      await callJson('opt=sql&action=insertrow',
+          {'handle': handle, 'sql': 'insert into t values (?)', 'args': [nasty]});
+
+      final rows = (await callJson('opt=sql&action=query',
+          {'handle': handle, 'sql': 'select v from t'}))['rows'] as List;
+      expect(rows.single['v'], nasty);
+    });
+
+    test('run reports how many rows it changed', () async {
+      final handle = await openDb();
+      await callJson('opt=sql&action=run',
+          {'handle': handle, 'sql': 'create table t (v integer)'});
+      for (final v in [1, 2, 3]) {
+        await callJson('opt=sql&action=insertrow',
+            {'handle': handle, 'sql': 'insert into t values (?)', 'args': [v]});
+      }
+
+      final changed = (await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'update t set v = v + 1 where v > ?',
+        'args': [1],
+      }))['changes'];
+      expect(changed, 2);
+    });
+
+    test('insertrow returns the new rowid', () async {
+      final handle = await openDb();
+      await callJson('opt=sql&action=run',
+          {'handle': handle, 'sql': 'create table t (v text)'});
+      final first = (await callJson('opt=sql&action=insertrow',
+          {'handle': handle, 'sql': "insert into t values ('a')"}))['rowid'];
+      final second = (await callJson('opt=sql&action=insertrow',
+          {'handle': handle, 'sql': "insert into t values ('b')"}))['rowid'];
+      expect(first, 1);
+      expect(second, 2);
+    });
+
+    test('a booleans binds as SQLite stores it', () async {
+      final handle = await openDb();
+      await callJson('opt=sql&action=run',
+          {'handle': handle, 'sql': 'create table t (done integer)'});
+      await callJson('opt=sql&action=insertrow', {
+        'handle': handle,
+        'sql': 'insert into t values (?)',
+        'args': [true],
+      });
+      final rows = (await callJson('opt=sql&action=query',
+          {'handle': handle, 'sql': 'select done from t'}))['rows'] as List;
+      expect(rows.single['done'], 1);
+    });
+
+    test('a bad statement comes back with its message', () async {
+      // The cursor routes swallow this and return -1. An app author debugging
+      // a typo needs to read what SQLite said.
+      final handle = await openDb();
+      final response = await postJson('opt=sql&action=query',
+          {'handle': handle, 'sql': 'select * from nope'});
+      expect(response.statusCode, 500);
+      expect(jsonDecode(response.body)['error'], contains('nope'));
+    });
+
+    test('an unknown database handle is an error, not an empty result', () {
+      return expectLater(
+        postJson('opt=sql&action=query', {'handle': 999, 'sql': 'select 1'})
+            .then((r) => r.statusCode),
+        completion(500),
+      );
+    });
+
+    test('a malformed body is a bad request', () async {
+      expect((await postJson('opt=sql&action=query', {'sql': 'select 1'}))
+          .statusCode, 400);
+      expect((await postJson('opt=sql&action=query', {'handle': 1})).statusCode,
+          400);
+      expect(
+        (await http.post(itf.replace(query: 'opt=sql&action=query'),
+                body: 'not json'))
+            .statusCode,
+        400,
+      );
+    });
+
+    test('the async routes never cache', () async {
+      final handle = await openDb();
+      await callJson('opt=sql&action=run',
+          {'handle': handle, 'sql': 'create table t (v integer)'});
+      final response = await postJson(
+          'opt=sql&action=query', {'handle': handle, 'sql': 'select * from t'});
+      expect(response.headers['cache-control'], contains('no-cache'));
     });
   });
 

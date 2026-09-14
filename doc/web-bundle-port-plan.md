@@ -325,14 +325,45 @@ IDE main menu, My Apps, launching the Example app, its navbar and dropdown,
 `bootstrap.Modal`, and the IDE's `Project` dropdown with per-item enable and
 disable states all render and behave correctly, with a clean console.
 
-### Phase 4 — optional, decide separately
+### Phase 4 — the UI layer
 
-- **CodeMirror 4.6.0 (2014) → CodeMirror 6.** It is 2.6 MB and ~500 of the 690
-  files — by far the largest single item, and a full rewrite (CM6 has a wholly
-  different API). Worth doing eventually; not required for the port. Keeping
-  CM4 works.
-- The 19 bootswatch themes are 3.3 MB for a feature (`xbTheme`) exercised once
-  in the Example app. Consider shipping 3–4.
+Planned in full in `doc/js-ui-framework-evaluation.md` §8. Progress:
+
+**Phase 4a — foundations ✅ done (2026-09-14)**
+
+1. All four pages got `<!DOCTYPE html>`, a charset, and `lang="en"`, so they
+   leave quirks mode; `maximum-scale=1, user-scalable=no` dropped from the three
+   system pages (evaluation §7.1, §7.2).
+2. Unreferenced vendored mass deleted: CodeMirror's 51 addons, 228 KB of
+   keymaps, 78 of 84 modes and all 89 demo `index.html` pages the embedded
+   server was exposing to the LAN, plus the dead top-level
+   `tools/css/bootstrap.min.css`. **2.6 MB → 592 KB** of CodeMirror; the bundle
+   as a whole **7.3 MB → 5.4 MB**, 464 files → 122.
+3. `tool/build_js.sh` added: an esbuild pass over `web/src/` producing the
+   vendored `acelery/*` modules, wired into `tool/build_bundle.sh` and stamped
+   so a stale build fails a test. Node is needed to *rebuild*, never to pack.
+
+**Phase 4b — the bridge ✅ done (2026-09-14)**
+
+4. `web/src/acelery/{bridge,sql,file,http,export}.js`: async ES modules on
+   `fetch`. `db.select(sql, args)` returns the whole result set in one call and
+   binds its parameters, replacing the per-row cursor walk and the `btoa`
+   transport encoding. Errors carry SQLite's message rather than returning -1.
+5. Dart side: `opt=sql&action=query|run|insertrow` accept a JSON body
+   `{handle, sql, args}`. The cursor routes stay until Phase 4d retires the
+   legacy library with the IDE rewrite.
+6. The 29 `typeof Android != "undefined"` branches deleted from `xscript.js`
+   (1,941 → 1,793 lines). The host has never registered that channel, so they
+   had been unreachable since Phase 2.
+
+**Still open:** 4c (widget layer), 4d (TableMaint, IDE, CodeMirror 6),
+4e (charts, native date inputs). Three product decisions gate 4c — see
+`js-ui-framework-evaluation.md` §9.
+
+Also still outstanding, independent of the above:
+
+- The 18 bootswatch themes are 4.1 MB for a feature (`xbTheme`) exercised once
+  in the Example app. Phase 4c replaces them with `data-bs-theme`.
 - `Example/example.js`'s `jsonNews()` calls the Google Feed API, **dead since
   2016**. Replace the demo or drop that menu item.
 
@@ -340,14 +371,31 @@ disable states all render and behave correctly, with a clean console.
 
 ## 5. What this plan deliberately does not do
 
-- **No rewrite of xScript's synchronous model.** Async-ifying 28 bridge methods
-  would force every user app ever written to be rewritten. The HTTP fallback
-  preserves the contract exactly.
-- **No Dart port of the widget layer.** The product *is* the JS API; users'
-  apps are written against it. It stays JS.
+> **Revised 2026-09-14.** The first two entries rested on backward compatibility
+> with user apps in the wild. **aCelery was never launched; there are none.**
+> `doc/js-ui-framework-evaluation.md` §1 sets this out, and §2 flagged both
+> entries for revision before Phase 4. They are rewritten below. The original
+> text is kept struck through, because the reasoning is what changed, not the
+> measurements.
+
+- ~~**No rewrite of xScript's synchronous model.** Async-ifying 28 bridge
+  methods would force every user app ever written to be rewritten.~~
+  **Void.** There are no user apps, so nothing is forced to be rewritten — and
+  the sync model is why the UI freezes during every database call. **The bridge
+  is async-only; there is no synchronous path.** Landed in Phase 4b: the new
+  `acelery/*` modules use `fetch` and `await`, and the cursor protocol is
+  replaced by one round-trip per statement with bound parameters.
+- ~~**No Dart port of the widget layer.** The product *is* the JS API; users'
+  apps are written against it.~~ **The conclusion holds; the reason does not.**
+  The UI stays web technology because **LAN remote access requires it** — an app
+  must render in a desktop browser over the network, which a Flutter widget tree
+  cannot do. Stated the old way, the next person to read this would conclude the
+  widget layer is untouchable, which is exactly backwards: it is being replaced
+  in Phase 4c.
 - **No change to the on-disk layout.** `aCelery/{db,files,log,www}` and
-  `acelery_app.json` stay as they are, so existing exported projects still
-  import.
+  `acelery_app.json` stay as they are. (The "so existing exported projects still
+  import" rationale is moot, but the layout is fine and there is no reason to
+  churn it. Phase 4c adds one optional `"entry"` field to the manifest.)
 
 ---
 
@@ -355,7 +403,7 @@ disable states all render and behave correctly, with a clean console.
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| Chromium drops sync XHR on the main thread | **High** — kills the bridge | No action now; it is still supported. Knowing this is the single point of failure is the mitigation. |
+| ~~Chromium drops sync XHR on the main thread~~ | **Not applicable** | **Retired in Phase 4b.** The `acelery/*` modules use `fetch`; no sync XHR remains in the new bridge. (It was over-rated anyway: Chromium's removal programme stalled after the Chrome 80 page-dismissal restriction.) The legacy `xscript.js` bridge still uses it until Phase 4d retires it with the IDE rewrite. |
 | WebView blocks cleartext to localhost | Medium | **Done in Phase 2**: `android/app/src/main/res/xml/network_security_config.xml` permits cleartext to `localhost`/`127.0.0.1` only and blocks it everywhere else; iOS `Info.plist` carries `NSAllowsLocalNetworking`. Verified in the merged manifest. |
 | BS3→BS5 class strings passed by hand | Medium | Phase 3.6 audit; contained to 2 files. |
 | Unzip-on-upgrade destroying user projects | **High** — data loss | Phase 0: never overwrite `www/user`, `db`, `files`. Bug present in the original. |
