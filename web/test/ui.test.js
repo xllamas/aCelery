@@ -253,3 +253,61 @@ test("a Modal renders its header and body", async () => {
   assert.match(document.body.textContent, /Delete it\?/);
   render(null, host);
 });
+
+test("useDismiss fires for a tap outside and not for one inside", async () => {
+  // The hook the overlaid navbar leans on: an inline menu left open is in the
+  // way, an overlaid one hides what is under it.
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+
+  let dismissed = 0;
+  function Panel() {
+    const ref = ui.useRef(null);
+    ui.useDismiss(ref, () => dismissed++, true);
+    return html`<div ref=${ref}><button>inside</button></div>`;
+  }
+  render(html`<${Panel} />`, host);
+  await flush();
+
+  const inside = host.querySelector("button");
+  inside.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true }));
+  assert.equal(dismissed, 0, "a tap on the panel itself is not outside");
+
+  document.body.dispatchEvent(
+    new dom.window.Event("pointerdown", { bubbles: true }));
+  assert.equal(dismissed, 1);
+
+  render(null, host);
+});
+
+test("useDismiss listens only while active, and unsubscribes", async () => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+
+  let dismissed = 0;
+  function Panel({ open }) {
+    const ref = ui.useRef(null);
+    ui.useDismiss(ref, () => dismissed++, open);
+    return html`<div ref=${ref}>panel</div>`;
+  }
+
+  render(html`<${Panel} open=${false} />`, host);
+  await flush();
+  document.body.dispatchEvent(
+    new dom.window.Event("pointerdown", { bubbles: true }));
+  assert.equal(dismissed, 0, "a closed panel must not listen");
+
+  render(html`<${Panel} open=${true} />`, host);
+  await flush();
+  document.body.dispatchEvent(
+    new dom.window.Event("pointerdown", { bubbles: true }));
+  assert.equal(dismissed, 1);
+
+  // Unmounting must remove the listener, or every screen the IDE has ever
+  // shown keeps handling taps.
+  render(null, host);
+  await flush();
+  document.body.dispatchEvent(
+    new dom.window.Event("pointerdown", { bubbles: true }));
+  assert.equal(dismissed, 1);
+});

@@ -9,7 +9,7 @@
  */
 
 import {
-  html, useState, useCallback,
+  html, useState, useCallback, useRef, useDismiss,
   Navbar, Nav, NavDropdown, Container, Alert, Button, Modal, ListGroup,
 } from "acelery/ui.js";
 
@@ -22,6 +22,15 @@ import {
 export function IdeNavbar({ title, items }) {
   const [open, setOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState(null);
+  const nav = useRef(null);
+
+  /* The collapsed menu is an overlay (tools/css/acelery.css), so it covers
+     what is under it and has to be dismissable without choosing anything. */
+  const close = useCallback(() => {
+    setOpen(false);
+    setOpenMenu(null);
+  }, []);
+  useDismiss(nav, close, open);
 
   /* Choosing anything closes both the collapse and any open dropdown. On a
      phone the collapse covers the screen, so leaving it open hides the thing
@@ -38,7 +47,7 @@ export function IdeNavbar({ title, items }) {
   return html`
     <${Navbar} expand="lg" className="bg-body-tertiary mb-3"
                expanded=${open} onToggle=${setOpen}>
-      <${Container} fluid>
+      <${Container} fluid ref=${nav}>
         <${Navbar.Toggle} aria-controls="ide-nav" />
         <${Navbar.Brand} className="h4 mb-0">${title}<//>
         <${Navbar.Collapse} id="ide-nav">

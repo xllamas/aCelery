@@ -35,6 +35,7 @@ export {
   notEmpty, notZero, email, tel, maxLength,
 } from "./form.js";
 export { Container, Row, Col, Panel, Card } from "./layout.js";
+export { useDismiss } from "./dismiss.js";
 export { TableMaint, useTableOptions } from "./table_maint.js";
 
 /* Charts are NOT re-exported here. Chart.js is 197 KB raw / 68 KB gzipped —

@@ -450,11 +450,15 @@ void main() {
           isFalse,
           reason: '18 × 228 KB of theme builds replaced by themes.css');
 
+      // "A full Bootstrap" means the framework's own variable block, which
+      // the complete build emits exactly once — not merely a file that names a
+      // Bootstrap class, which any of our own stylesheets may do.
       final fullBootstraps = Directory('${tools.path}/css')
           .listSync(recursive: true)
           .whereType<File>()
           .where((f) => f.path.endsWith('.css'))
-          .where((f) => f.readAsStringSync().contains('.container-fluid'))
+          .where((f) =>
+              f.readAsStringSync().contains(':root,[data-bs-theme=light]'))
           .length;
       expect(fullBootstraps, 1, reason: 'more than one full Bootstrap shipped');
     });
@@ -924,6 +928,59 @@ void main() {
       final chart = File('${acelery.path}/chart.js');
       expect(chart.lengthSync(), lessThan(260 * 1024),
           reason: '${chart.lengthSync()} bytes — §3.8 measured ~203 KB raw');
+    });
+  });
+
+  group('the collapsed navbar overlays rather than pushing the page', () {
+    final css = File('${tools.path}/css/acelery.css');
+
+    test('every page loads the product stylesheet', () {
+      // Including launcher.html, so a user app's navbar behaves like the
+      // system shell's.
+      expect(css.existsSync(), isTrue);
+      for (final page in pages) {
+        expect(read(page), contains('/tools/css/acelery.css'),
+            reason: page.path);
+      }
+    });
+
+    test('the collapsed menu is positioned out of the flow', () {
+      // Bootstrap's collapsed navbar is a block in normal flow, so opening it
+      // pushes everything below down the page — on a phone, far enough that
+      // what you were looking at leaves the screen, and back again on close.
+      final text = css.readAsStringSync();
+      expect(text, contains('position: absolute'));
+      expect(text, contains('width: max-content'),
+          reason: 'a menu of short labels should not stretch to the viewport');
+      expect(text, contains('overflow-y: auto'),
+          reason: 'a long menu must scroll rather than run off the screen');
+    });
+
+    test('it only applies below the expand breakpoint', () {
+      // Above it the navbar expands as Bootstrap intends and none of this
+      // should be in play.
+      final text = css.readAsStringSync();
+      final media = RegExp(r'@media \(max-width: 991\.98px\)').firstMatch(text);
+      expect(media, isNotNull,
+          reason: 'the overlay rules must be inside the navbar-expand-lg '
+              'breakpoint');
+      expect(text.indexOf('position: absolute'), greaterThan(media!.start));
+    });
+
+    test('both navbars can be dismissed without choosing anything', () {
+      // An inline menu left open is in the way; an overlaid one hides what is
+      // under it, so tapping outside has to close it.
+      for (final source in [
+        'web/src/ide/chrome.js',
+        'bundle/www/user/Example/example.js',
+      ]) {
+        expect(File(source).readAsStringSync(), contains('useDismiss'),
+            reason: source);
+      }
+      final dismiss = File('web/src/ui/dismiss.js').readAsStringSync();
+      expect(dismiss, contains('pointerdown'));
+      expect(dismiss, contains('Escape'),
+          reason: 'aCelery also runs in a desktop browser over the LAN');
     });
   });
 

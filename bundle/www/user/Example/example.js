@@ -27,7 +27,7 @@ import { saveFile, closeApp } from "acelery/export.js";
    never draw one — an app pays for it only by asking. */
 import { Chart, fromRows } from "acelery/chart.js";
 import {
-  html, render, useState, useEffect,
+  html, render, useState, useEffect, useRef, useDismiss,
   Navbar, Nav, NavDropdown, Container,
   Alert, Button, ButtonGroup, ListGroup, Modal, Tab, Tabs,
   Row, Col, Panel,
@@ -303,6 +303,12 @@ function App() {
   const [failure, setFailure] = useState(null);
   const [screen, setScreen] = useState("welcome");
   const [menuOpen, setMenuOpen] = useState(false);
+  const nav = useRef(null);
+
+  /* The collapsed menu overlays the page rather than pushing it down, so it
+     closes on a tap outside as well as on a choice. `useDismiss` is part of
+     the widget layer; an app's own panels can use it too. */
+  useDismiss(nav, () => setMenuOpen(false), menuOpen);
 
   useEffect(() => {
     let live = true;
@@ -325,7 +331,7 @@ function App() {
   return html`
     <${Navbar} expand="lg" className="bg-body-tertiary mb-3"
                expanded=${menuOpen} onToggle=${setMenuOpen}>
-      <${Container} fluid>
+      <${Container} fluid ref=${nav}>
         <${Navbar.Toggle} aria-controls="example-nav" />
         <${Navbar.Brand} href="#" onClick=${() => go("welcome")}>aCelery<//>
         <${Navbar.Collapse} id="example-nav">
