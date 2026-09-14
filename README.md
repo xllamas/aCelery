@@ -96,6 +96,35 @@ flutter test                     # the host, the bridge, and the bundle's shape
 vendored, so a full rebuild and reinstall is the only way to see a bundle
 change on a device.
 
+### In a desktop browser
+
+Two ways, and they test different things.
+
+```sh
+adb forward tcp:8123 tcp:8123     # then open http://localhost:8123/
+```
+
+Reaches the app on a device or emulator, with DevTools. `adbd` connects from
+`127.0.0.1` *inside* the device, so the request counts as loopback and skips
+pairing. That makes it the quick way to drive the UI — and it exercises the
+remote JavaScript path, because a browser has no `ACeleryHost`, so `Run` opens
+the launcher in a tab rather than pushing a Flutter route.
+
+```sh
+dart run tool/serve.dart --share  # then open http://<this machine>:8123/
+```
+
+Runs the real server here, against a throwaway copy of the bundle in a temp
+directory. Reaching it by this machine's own LAN address means the request
+arrives from a non-loopback address, which is the only way to exercise pairing
+from one machine. The approval prompt that would appear on the device is
+printed to the terminal and answered there.
+
+Do not leave the `adb forward` in place while `tool/serve.dart` runs: both can
+bind at once — adb takes `127.0.0.1:8123`, the script takes `*:8123` — and
+macOS prefers the more specific one, so `localhost` quietly reaches the
+emulator while the LAN address reaches the script.
+
 ## The stack
 
 Chosen in `doc/js-ui-framework-evaluation.md`, which records the measurements
