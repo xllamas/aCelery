@@ -108,14 +108,26 @@ rm -f "$OUT/.meta.json"
   --outfile="../$OUT/editor.js" \
   --log-level=warning)
 
-# 4. Themes: all 18 as CSS custom properties on one stylesheet (§3.4), from the
+# 4. The IDE shell. Bundled the same way an app would be, because it is one:
+#    it imports acelery/ui.js and the capability modules by bare name and has
+#    no privileged access to anything (§8 step 10).
+(cd web && node_modules/.bin/esbuild src/ide/index.js \
+  --bundle \
+  --format=esm \
+  --target=es2022 \
+  --minify \
+  --external:acelery/* \
+  --outfile="../$OUT/ide.js" \
+  --log-level=warning)
+
+# 5. Themes: all 18 as CSS custom properties on one stylesheet (§3.4), from the
 #    bootswatch npm package, so 4.1 MB of theme builds lives in neither the repo
 #    nor the install.
 node tool/build_themes.mjs
 
 # A stamp over the inputs, so a test can tell that the committed output was
 # built from the sources next to it without needing node to rebuild and diff.
-cat web/src/acelery/*.js web/src/ui/*.js web/src/editor/*.js | shasum -a 256 | cut -d' ' -f1 \
+cat web/src/acelery/*.js web/src/ui/*.js web/src/editor/*.js web/src/ide/*.js | shasum -a 256 | cut -d' ' -f1 \
   > "$OUT/.sources.sha256"
 
 echo "$OUT: $(ls "$OUT"/*.js | wc -l | tr -d ' ') modules, $(du -sh "$OUT" | cut -f1)"

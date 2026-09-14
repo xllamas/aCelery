@@ -738,16 +738,47 @@ second defect that had nothing to do with it:
       and gets the same five back from `acelery/editor.js`. CM4's whole
       vendored tree is gone, and with it the last classic `<script>` tags in
       the IDE.
-    - **The IDE shell — next.** 1,024 lines of `system/index.html`: project
-      manager, file manager, DB manager, editor host, config.
+    - **The IDE shell ✅ done (2026-09-14).** 1,024 lines of `system/index.html`
+      became `web/src/ide/` — shell, chrome, IDE screen, DB screen — bundled as
+      `acelery/ide.js`. The page that hosts it now carries **no classic scripts
+      at all**: no `xscript.js`, no `bootstrap.bundle.min.js`, no Tempus
+      Dominus. react-bootstrap implements the interactive components in the
+      component tree, which is what finally makes Bootstrap's own JavaScript
+      droppable — the byte claim §3.1a made and could not collect until now.
+      Menu enable/disable was 40 lines of positional
+      `navBar.getNavItem(1).getElement(2)` indexing, where inserting an item
+      silently rewired the logic; a menu item now declares its own `disabled`.
+
+#### The bug the IDE rewrite uncovered, which was not the IDE's
+
+Every dropdown in the product was dead under any Bootswatch theme, and had been
+since Phase 4c. `tool/build_themes.mjs` scoped each delta rule by prefixing
+`:root[data-acelery-theme="x"] `, which scores **(0,2,1)** against Bootstrap's
+`.dropdown-menu.show` at **(0,2,0)** — so Bootswatch's
+`.dropdown-menu{display:none}` won and no menu could open. Nothing errored: the
+markup was correct, the click handler ran, `aria-expanded` flipped to `true`,
+and the element carried `.show`. Only `getComputedStyle` said `none`.
+
+The fix is `:where(:root[data-acelery-theme="x"])`, which contributes zero
+specificity, so a scoped rule keeps exactly the score it had in its own
+stylesheet and source order does the rest. Two tests now pin it: that theme
+deltas are scoped with `:where`, and that no theme can hide `.dropdown-menu` at
+a specificity Bootstrap cannot undo.
+
+Two smaller ones alongside it: `applyTheme` used a different `<link>` id than
+the pages ship, so both stylesheets stayed attached and the theme being
+switched away from kept applying; and the aCelery theme set
+`--bs-navbar-color`, tinting every nav link the pale teal meant for the brand,
+which on a light navbar reads as "disabled".
 11. Rewrite the Example app — it is the reference documentation for authors.
     ✅ **done (2026-09-14).** One file on the new API, demonstrating CRUD,
     linked tables, tabs, forms with validation, a responsive `<Row>`/`<Col>`
     layout, a modal, theme switching and CSV export. `jsonNews()` is dropped:
     it called the Google Feed API, dead since 2016.
 12. New test suite replacing the Bootstrap-3-era guards (§6). **In progress** —
-    64 node tests and 123 Dart tests so far, including both halves of the
-    JS↔SQLite seam.
+    64 node and 131 Dart tests, including both halves of the JS↔SQLite seam,
+    the CSS specificity rule above, and a check that the IDE page carries no
+    classic scripts.
 
 #### A defect the rebuild fixed by construction
 

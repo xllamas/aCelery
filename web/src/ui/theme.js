@@ -31,7 +31,12 @@ export const THEMES = [
 const DARK = new Set(["cyborg", "darkly", "slate", "superhero"]);
 
 const THEME_DIR = "/tools/css/themes/";
-const LINK_ID = "acelery-theme";
+
+/* The same id the pages put on their initial <link>, and the same one
+   xbTheme.setTheme uses in the legacy library. Using a different one left both
+   stylesheets attached, so the theme being switched away from kept applying —
+   which is only invisible while two themes happen to agree. */
+const LINK_ID = "xbtheme";
 
 /**
  * Applies a theme: points the theme <link> at its delta and sets the attributes

@@ -84,8 +84,11 @@ const ACELERY = `
   --bs-link-color-rgb: 88, 109, 114;
   --bs-link-hover-color: #465a5e;
   --bs-link-hover-color-rgb: 70, 90, 94;
+  /* The brand only. Setting --bs-navbar-color here would tint every nav link
+     the same pale teal, which on a light navbar reads as "disabled" — the
+     whole menu looked greyed out. */
   --bs-navbar-brand-color: #86a0a4;
-  --bs-navbar-active-color: #86a0a4;
+  --bs-navbar-brand-hover-color: #6f878b;
 }
 :root[data-acelery-theme="acelery"] .btn-primary {
   --bs-btn-bg: #586d72;
@@ -140,9 +143,29 @@ function rules(css) {
   return out;
 }
 
-/** Raises a rule's specificity so the delta layers over the base stylesheet. */
+/**
+ * Scopes a rule to one theme *without changing its specificity*.
+ *
+ * The obvious way — prefixing `:root[data-acelery-theme="x"] ` — is wrong, and
+ * wrong in a way that takes a while to find. Bootswatch ships
+ * `.dropdown-menu{display:none}` and Bootstrap unhides it with
+ * `.dropdown-menu.show{display:block}`. Prefixed, the theme's rule scores
+ * (0,2,1) against the base's (0,2,0), so it wins and *every dropdown in the
+ * product stops opening* under any Bootswatch theme — with no error anywhere,
+ * because the markup is perfect and the click handler runs.
+ *
+ * `:where()` contributes zero specificity, so a scoped rule keeps exactly the
+ * score it had inside its own stylesheet and the relationships Bootstrap
+ * relies on survive intact. Source order still puts the theme after the base,
+ * which is all the scoping needs to do.
+ *
+ * Selectors that describe the root element itself are a separate case: they
+ * must keep at least their original weight, or the base `:root` block would
+ * beat the theme's variables. Those get the attribute directly.
+ */
 function scope(rule, theme) {
-  const attr = `:root[data-acelery-theme="${theme}"]`;
+  const where = `:where(:root[data-acelery-theme="${theme}"])`;
+  const attr = `[data-acelery-theme="${theme}"]`;
   const brace = rule.indexOf("{");
   const selector = rule.slice(0, brace);
   const body = rule.slice(brace);
@@ -153,16 +176,17 @@ function scope(rule, theme) {
     return `${selector}{${rules(inner).map((r) => scope(r, theme)).join("")}}`;
   }
 
-  // `:root` and `[data-bs-theme=…]` selectors describe the document, so the
-  // attribute goes on them rather than in front of them.
   const scoped = selector
     .split(",")
     .map((s) => {
       const t = s.trim();
-      if (t === ":root" || t.startsWith(":root")) return attr + t.slice(5);
-      if (t.startsWith("[data-bs-theme")) return `${attr}${t}`;
-      if (t === "html" || t === "body") return `${attr} ${t === "html" ? "" : t}`.trim() || attr;
-      return `${attr} ${t}`;
+      // Root-targeting selectors: keep their own weight, add the attribute.
+      if (t === ":root") return `:root${attr}`;
+      if (t.startsWith(":root")) return `:root${attr}${t.slice(5)}`;
+      if (t.startsWith("[data-bs-theme")) return `:root${attr}${t}`;
+      if (t === "html") return `:root${attr}`;
+      // Everything else keeps its specificity exactly.
+      return `${where} ${t}`;
     })
     .join(",");
 

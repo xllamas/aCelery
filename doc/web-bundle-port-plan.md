@@ -377,8 +377,25 @@ Two host-side changes fell out of it, both recorded in `lib/`:
 - Static responses carry `Cache-Control: no-cache`, so the WebView revalidates.
   Without it, edit-then-Run served the previous version of a file.
 
-**Still open:** 4d (TableMaint, IDE rewrite, CodeMirror 6), 4e (charts, native
-date inputs). Decisions 7 and 8 in `js-ui-framework-evaluation.md` §9 remain.
+**Phase 4d — the product ✅ done (2026-09-14)**
+
+10. `TableMaint` rebuilt as a component: all five views, rowid pagination,
+    slave mode, every field type, every pre/post hook — parameterised, async,
+    and without the five `this.clear()` sites that demolished the card body on
+    every navigation.
+11. CodeMirror 4 replaced by a tree-shaken CodeMirror 6 (566 KB, four
+    languages), with line wrapping — the phone-first property §3.7 chose it for.
+12. The IDE rewritten as `acelery/ide.js`. `system/index.html` went from 1,024
+    lines and seven classic `<script>` tags to a page that loads two ES modules
+    and nothing else.
+13. The Example app rewritten as the reference it is supposed to be.
+
+**Still open:** 4e (charts, native date inputs, Font Awesome subset). Decisions
+7-10 in `js-ui-framework-evaluation.md` §9 remain, none of which gate anything.
+
+`launcher.html` and `errorlog.html` are the last two pages still on the 2014
+library — the launcher deliberately, since it hosts user apps that may be
+written against it.
 
 Also still outstanding, independent of the above:
 

@@ -10,8 +10,11 @@
   --bs-link-color-rgb: 88, 109, 114;
   --bs-link-hover-color: #465a5e;
   --bs-link-hover-color-rgb: 70, 90, 94;
+  /* The brand only. Setting --bs-navbar-color here would tint every nav link
+     the same pale teal, which on a light navbar reads as "disabled" — the
+     whole menu looked greyed out. */
   --bs-navbar-brand-color: #86a0a4;
-  --bs-navbar-active-color: #86a0a4;
+  --bs-navbar-brand-hover-color: #6f878b;
 }
 :root[data-acelery-theme="acelery"] .btn-primary {
   --bs-btn-bg: #586d72;

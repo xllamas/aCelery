@@ -20,6 +20,13 @@ void main() {
     'bundle/www/system/errorlog.html',
   ].map(File.new).toList();
 
+  /// The pages still built on the 2014 widget layer. system/index.html left
+  /// this list in Phase 4d; launcher.html and errorlog.html have not yet.
+  final legacyPages = [
+    'bundle/www/system/launcher.html',
+    'bundle/www/system/errorlog.html',
+  ].map(File.new).toList();
+
   String read(File f) => f.readAsStringSync();
 
   group('Bootstrap 3 and jQuery are gone', () {
@@ -90,8 +97,12 @@ void main() {
       }
     });
 
-    test('every page loads the stack xscript_bs5 assumes', () {
-      for (final page in pages) {
+    test('the pages still on xscript_bs5 load the stack it assumes', () {
+      // system/index.html left this list in Phase 4d: the shell is a component
+      // tree now and loads none of it. launcher.html still hosts user apps
+      // written against the old library, and errorlog.html is not rewritten
+      // yet, so both still need it.
+      for (final page in legacyPages) {
         final html = read(page);
         // bootstrap.bundle carries Popper, which Tempus Dominus positions with.
         expect(html, contains('js/bootstrap.bundle.min.js'), reason: page.path);
@@ -103,7 +114,7 @@ void main() {
     });
 
     test('bootstrap loads before the script that uses it', () {
-      for (final page in pages) {
+      for (final page in legacyPages) {
         final html = read(page);
         expect(html.indexOf('js/bootstrap.bundle.min.js'),
             lessThan(html.indexOf('js/xscript_bs5.js')),
@@ -287,13 +298,50 @@ void main() {
           reason: '$total bytes; 18 Bootswatch builds were 4.1 MB');
     });
 
+    test('scoping a theme rule does not change its specificity', () {
+      // The bug this exists for: prefixing `:root[data-acelery-theme="x"] `
+      // scores (0,2,1) against Bootstrap's `.dropdown-menu.show` at (0,2,0),
+      // so Bootswatch's `.dropdown-menu{display:none}` won and *every dropdown
+      // in the product stopped opening* under any theme — silently, because
+      // the markup and the click handler were both correct. `:where()`
+      // contributes zero specificity, so a scoped rule keeps the score it had
+      // in its own stylesheet and source order does the rest.
+      final united =
+          File('${themeDir.path}/united.css').readAsStringSync();
+      expect(united, contains(':where(:root[data-acelery-theme="united"])'));
+
+      // Specifically: nothing may out-specify `.dropdown-menu.show`.
+      final offenders = RegExp(r'(:root\[data-acelery-theme="[a-z]+"\]) ([^{,]+)\{')
+          .allMatches(united)
+          .map((m) => m.group(0)!)
+          .toList();
+      expect(offenders, isEmpty,
+          reason: 'descendant rules must be scoped with :where()');
+    });
+
+    test('a themed page can still open a dropdown', () {
+      // The end state the rule above protects, asserted directly: for every
+      // theme, the last rule setting `display` on a bare `.dropdown-menu` must
+      // not be able to beat `.dropdown-menu.show`.
+      for (final css in themeDir.listSync().whereType<File>()) {
+        final text = css.readAsStringSync();
+        final bare = RegExp(r'([^{}]*)\.dropdown-menu\{[^}]*display:none')
+            .allMatches(text);
+        for (final match in bare) {
+          expect(match.group(1), contains(':where('),
+              reason: '${css.path} hides .dropdown-menu at a specificity '
+                  'Bootstrap cannot undo');
+        }
+      }
+    });
+
     test('every rule in a theme is scoped to that theme', () {
       // An unscoped rule would leak into every other theme.
       final darkly = File('${themeDir.path}/darkly.css').readAsStringSync();
       final body = darkly.substring(darkly.indexOf('*/') + 2);
       for (final rule in body.split('\n').where((l) => l.contains('{'))) {
         if (rule.trimLeft().startsWith('@')) continue;
-        expect(rule, contains('[data-acelery-theme="darkly"]'),
+        expect(rule, contains('data-acelery-theme="darkly"'),
             reason: rule.substring(0, rule.indexOf('{')));
       }
     });
@@ -334,6 +382,15 @@ void main() {
       expect(ui, contains('data-acelery-theme'));
       expect(ui, contains('data-bs-theme'));
       expect(ui, contains('/tools/css/themes/'));
+
+      // And they must reuse the <link> the page ships rather than adding a
+      // second one — two attached theme stylesheets means the one being
+      // switched away from keeps applying.
+      expect(ui, contains('"xbtheme"'));
+      expect(body, contains('"xbtheme"'));
+      for (final page in pages) {
+        expect(read(page), contains('id="xbtheme"'), reason: page.path);
+      }
     });
 
     test('every page carries a theme before first paint', () {
@@ -373,7 +430,6 @@ void main() {
   group('Phase 4a — the vendored trees stay pruned', () {
     // A vendor refresh that re-extracts an upstream archive would silently put
     // ~2 MB back. These pin what was removed and why.
-    final cm = Directory('${tools.path}/codemirror');
 
     test('CodeMirror 4 is gone entirely', () {
       // Phase 4a cut it from 2.6 MB to 592 KB by deleting the 78 unreferenced
@@ -438,7 +494,12 @@ void main() {
       // Same order tool/build_js.sh cats them in: acelery/ then ui/, each
       // glob-sorted.
       final sources = [
-        for (final dir in ['web/src/acelery', 'web/src/ui', 'web/src/editor'])
+        for (final dir in [
+        'web/src/acelery',
+        'web/src/ui',
+        'web/src/editor',
+        'web/src/ide',
+      ])
           ...(Directory(dir)
               .listSync()
               .whereType<File>()
@@ -648,7 +709,7 @@ void main() {
       final decoded = jsonDecode(manifest) as Map<String, Object?>;
       expect(decoded['entry'], 'example.js');
 
-      final ide = read(pages.first);
+      final ide = File('web/src/ide/ide_screen.js').readAsStringSync();
       expect(ide, contains('entry: "main.js"'),
           reason: 'new projects must get an entry field');
       expect(ide, contains('export default function main'),
@@ -682,6 +743,7 @@ void main() {
       // launcher.html and errorlog.html never edit code, so they must not pay
       // for an editor — which is why it is its own bundle, not part of ui.js.
       expect(read(pages.first), contains('acelery/editor.js'));
+      expect(read(pages.first), contains('acelery/ide.js'));
       for (final page in pages.sublist(1)) {
         expect(read(page), isNot(contains('editor.js')), reason: page.path);
       }
@@ -720,13 +782,13 @@ void main() {
     test('the IDE drives the editor through the small API it always used', () {
       // CM4 gave the IDE five things. Keeping the same five is what lets the
       // editor migration and the IDE rewrite stay separate pieces of work.
-      final ide = read(pages.first);
+      final ide = File('web/src/ide/ide_screen.js').readAsStringSync();
       for (final call in [
         'createEditor(',
         '.getValue()',
-        '.setSize(',
         '.setTheme(',
         'onChange:',
+        '.destroy()',
       ]) {
         expect(ide, contains(call), reason: call);
       }
@@ -738,10 +800,10 @@ void main() {
       // CM6 themes are extensions, not the 30 stylesheets CM4 shipped, so the
       // list is Light / Dark / follow (§9.9). Following is the default because
       // a light editor inside Darkly is the wrong answer.
-      final ide = read(pages.first);
-      expect(ide, contains('Follow app theme'));
-      expect(ide, contains('resolvedEditorTheme'));
-      expect(ide, contains("data-bs-theme"));
+      final shell = File('web/src/ide/index.js').readAsStringSync();
+      expect(shell, contains('Follow app theme'));
+      // "" means follow, resolved through the app theme's light/dark mode.
+      expect(shell, contains('isDark()'));
 
       final source = File('web/src/editor/index.js').readAsStringSync();
       expect(source, contains('oneDark'));

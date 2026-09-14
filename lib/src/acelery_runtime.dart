@@ -16,7 +16,7 @@ class ACeleryRuntime {
 
   /// Bump when `assets/aCelery.zip` changes, so installed devices refresh the
   /// shipped files on their next launch. User content is never touched.
-  static const String bundleVersion = '1.1.2+phase4d-cm6';
+  static const String bundleVersion = '1.2.8+phase4d-ide';
 
   final ACeleryPaths paths;
   final ACeleryServer server;
