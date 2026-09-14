@@ -9,55 +9,136 @@
 <link rel="stylesheet" type="text/css" href="/tools/fontawesome/css/all.min.css" />
 <link rel="stylesheet" type="text/css" href="/tools/css/tempus-dominus.min.css" />
 
+<!-- Lets an app import the capability modules and the widget layer by bare
+     name, with no bundler and no build step of its own:
+
+         import { openDB } from "acelery/sql.js";
+         import { html, render, Panel } from "acelery/ui.js";
+
+     Import maps are Chrome 89+ / Safari 16.4+, which covers Android System
+     WebView (Play-updatable, so current on any live device) and iOS WKWebView.
+     See doc/js-ui-framework-evaluation.md §3.2. -->
+<script type="importmap">
+{ "imports": { "acelery/": "/tools/js/acelery/" } }
+</script>
+
 <script src="/tools/js/bootstrap.bundle.min.js" type="text/javascript"></script>
 <script src="/tools/js/tempus-dominus.min.js" type="text/javascript"></script>
 <script src="/tools/js/xscript.js" type="text/javascript" charset="utf-8"></script>
 <script src="/tools/js/xscript_bs5.js" type="text/javascript" charset="utf-8"></script>
 <script src="/tools/js/xscript_crud.js" type="text/javascript" charset="utf-8"></script>
-<script src="/tools/js/lazyload.js" type="text/javascript" charset="utf-8"></script>
 </head>
 <body>
-<script>
-/*  Copyright 2014: Xavier Llamas Rolland                      */ 
+<script type="module">
+/*  Copyright 2014: Xavier Llamas Rolland                      */
 /*                                                             */
 /*  This software distributed under the GPLv3 License          */
 /*                                                             */
 ////////////////////////////////////////////////////////////////
 
+/* Loads and runs one user app.
+ *
+ * This used to LazyLoad every loose .js in the app folder in directory order
+ * and then call a global main(). An app therefore had no module scope, no
+ * declared entry point, and a load order it could not control. The platform
+ * does all three: one documented entry, imported as a module, resolving its own
+ * imports (§3.2). lazyload.js — 390 lines — is gone with it.
+ */
 
-var reqJsFiles = [], reqCssFiles = [];
+import * as file from "acelery/file.js";
 
-function loadFiles(){
-   var projF = new xFile();
-   var path = projF.getExtStoragePath() + "/aCelery/www/user/";
-   var app = xGetURLParameter("app");
-   var fname, ext;
-   
-   if (!app)
-      return false;
-   var files = projF.listFiles(app,path);
-   if (files){
-      for (var i = 0; i < files.length; i++){
-         if (!files[i].directory){
-            fname = files[i].fname;
-            ext = fname.substr(fname.lastIndexOf('.') + 1);
-            if (ext == "js")
-               reqJsFiles.push("/user/" + app + "/" + fname);
-            else
-            if (ext == "css")
-               reqCssFiles.push("/user/" + app + "/" + fname);
-         }
-      }
-   }
-   if (reqCssFiles.length > 0){
-      LazyLoad.css(reqCssFiles,function(){});
-   }
-   if (reqJsFiles.length > 0){
-      LazyLoad.js(reqJsFiles,function(){main()});
-   }
+const STORAGE = "/user/";
+
+/** Shows a failure where the app would have been, not only in the console. */
+function fail(title, detail) {
+  console.error(`aCelery: ${title}`, detail ?? "");
+  document.body.innerHTML = "";
+  const alert = document.createElement("div");
+  alert.className = "alert alert-danger m-3";
+  alert.setAttribute("role", "alert");
+  const heading = document.createElement("h5");
+  heading.className = "alert-heading";
+  heading.textContent = title;
+  alert.appendChild(heading);
+  if (detail) {
+    const pre = document.createElement("pre");
+    pre.className = "mb-0 text-wrap";
+    pre.textContent = String(detail);
+    alert.appendChild(pre);
+  }
+  document.body.appendChild(alert);
 }
 
-loadFiles();
+/** Adds one stylesheet, in the order the app folder lists them. */
+function addStylesheet(href) {
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = href;
+  document.head.appendChild(link);
+}
+
+async function run() {
+  const app = xGetURLParameter("app");
+  if (!app) return fail("No app named", "launcher.html needs ?app=<name>");
+
+  const base = (await file.externalStoragePath()) + "/aCelery/www/user/";
+  const entries = await file.listFiles(app, base);
+
+  /* The manifest names the entry point; main.js when it does not say. */
+  let entry = "main.js";
+  if (entries.some((e) => e.fname === "acelery_app.json")) {
+    const handle = await file.open("acelery_app.json", base + app);
+    try {
+      const manifest = JSON.parse(await handle.read());
+      if (manifest.entry) entry = manifest.entry;
+    } catch (e) {
+      return fail("acelery_app.json could not be read", e);
+    } finally {
+      await handle.close();
+    }
+  }
+
+  for (const e of entries) {
+    if (!e.directory && e.fname.endsWith(".css")) {
+      addStylesheet(`${STORAGE}${app}/${e.fname}`);
+    }
+  }
+
+  if (!entries.some((e) => e.fname === entry)) {
+    return fail(
+      `${app} has no ${entry}`,
+      'An app runs one entry module. Name it "main.js", or set "entry" in ' +
+        "acelery_app.json.",
+    );
+  }
+
+  let module;
+  try {
+    module = await import(`${STORAGE}${app}/${entry}`);
+  } catch (e) {
+    // Unbundled files mean this stack points straight at the author's line.
+    return fail(`${entry} failed to load`, e.stack ?? e);
+  }
+
+  /* `export default` is the contract. A named `main` export and a global one
+     are accepted too, so an author who exported the wrong thing gets their app
+     rather than a blank page. */
+  const main = module.default ?? module.main ?? globalThis.main;
+  if (typeof main !== "function") {
+    return fail(
+      `${entry} exports no entry function`,
+      "Add: export default function main() { … }",
+    );
+  }
+
+  try {
+    await main();
+  } catch (e) {
+    return fail(`${app} threw while starting`, e.stack ?? e);
+  }
+}
+
+run();
 </script>
 </body>
 </html>

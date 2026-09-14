@@ -22,6 +22,7 @@ function tabsTest(){
    pane1.addElement(new xbPara("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin et erat et metus auctor cursus. Ut congue facilisis velit sit amet dapibus"));
    pane2.addElement(new xbPara("Nam pellentesque porta odio, eu auctor felis viverra eget. Aenean tortor ligula, ornare quis tristique in, fermentum nec elit. Lorem ipsum dolor sit amet"));
    pane3.addElement(new xbPara("Nullam et orci consequat, feugiat nisi in, consectetur mauris. Aenean nec imperdiet augue. Etiam placerat neque lectus, vel volutpat justo dapibus sed"));
+   var e;
    if (e = topLayout.getElement(1,0))
       e.remove();
    topLayout.addElement(myTabs,1,0);
@@ -46,6 +47,7 @@ function widgetTest(){
                         .addOption("Option 3","3"))
         .addElement(btnGroup);                
                         
+   var e;
    if (e = topLayout.getElement(1,0))
       e.remove();
    topLayout.addElement(panel,1,0);
@@ -63,6 +65,7 @@ function jsonNews(){
               .addElement(new xPara(ent.contentSnippet));
       list.addElement(item);
    }
+   var e;
    if (e = topLayout.getElement(1,0))
       e.remove();
    topLayout.addElement(list,1,0);
@@ -116,6 +119,7 @@ function dirMaint(dbl){
                                          .addOption("Mobile","m"));
       person.addLinkedTable(person_tel,"person");
    }
+   var e;
    if (e = topLayout.getElement(1,0))
       e.remove();
    topLayout.addElement(person,1,0);
@@ -153,7 +157,19 @@ function showMenu(){
                   .setToTop();
 }
 
-function main(){
+/* The entry point. launcher.html imports this file as a module and calls the
+   default export; acelery_app.json names the file (§3.2).
+
+   Everything above stays module-scoped rather than global, which works
+   unchanged because xScript binds function *references* — .bindFunction(f)
+   assigns node.onclick = f — rather than building handler strings that would
+   need to resolve a global name.
+
+   The xScript globals this app still uses (xSQL, xbNavBar, …) come from the
+   classic <script> tags in launcher.html. Phase 4d rewrites this app onto
+   acelery/ui.js, where it will import them instead. */
+
+export default function main(){
    initDB();
    showMenu();
 }

@@ -452,6 +452,18 @@ void main() {
   });
 
   group('static files', () {
+    test('a static response must be revalidated, never reused blind', () async {
+      // shelf_static sends Last-Modified but nothing tells the client it has
+      // to ask. A WebView then picks its own freshness lifetime and serves a
+      // stale file without a request, which breaks the IDE's edit-then-Run
+      // loop — and an ES module caches harder than a script did.
+      await File('${paths.wwwRoot}app.js').writeAsString('export default 1;');
+      final response = await http
+          .get(Uri.parse('http://127.0.0.1:${server.boundPort}/app.js'));
+      expect(response.statusCode, 200);
+      expect(response.headers['cache-control'], contains('no-cache'));
+    });
+
     test('the www tree is served', () async {
       await File('${paths.wwwRoot}index.html').writeAsString('<html>hi</html>');
       final response =

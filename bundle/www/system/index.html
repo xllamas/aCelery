@@ -22,7 +22,6 @@
 <script src="/tools/codemirror/mode/css/css.js" type="text/javascript" charset="utf-8"></script>
 <script src="/tools/codemirror/mode/php/php.js" type="text/javascript" charset="utf-8"></script>
 <script src="/tools/codemirror/mode/htmlmixed/htmlmixed.js" type="text/javascript" charset="utf-8"></script>
-<script src="/tools/js/lazyload.js" type="text/javascript" charset="utf-8"></script>
 <title>aCelery</title>
 </head>
 <body>
@@ -34,6 +33,31 @@
 ////////////////////////////////////////////////////////////////
 
 var reqCssFiles = [];
+
+/* lazyload.js — 390 lines, 13 KB — existed for this and for launcher.html's
+   script loading, both of which the platform now does (§3.2). A <link> is the
+   whole of what was still being used. */
+
+function addStylesheet(href,id){
+   var link = id && document.getElementById(id);
+   if (!link){
+      link = document.createElement("link");
+      link.rel = "stylesheet";
+      if (id)
+         link.id = id;
+      document.head.appendChild(link);
+   }
+   link.href = href;
+   return link;
+}
+
+/* The editor theme is swapped in place rather than stacked: CodeMirror themes
+   are mutually exclusive, and the old code appended a new <link> on every
+   change, so a session that tried five themes carried all five. */
+
+function setEditorTheme(name){
+   addStylesheet("/tools/codemirror/theme/" + name + ".css","cm-theme");
+}
 var topNav = null;
 var navBar, projDd, fileDd;
 var ideLayout, newAppModal, newFileModal, newDbModal, dbLayout;
@@ -139,11 +163,26 @@ function createProject(iName,iDesc){
    var appFile = new xFile();
    var path = appFile.getExtStoragePath() + "/aCelery/www/user/";
    appFile.mkDir(pName,path);
-   var appObj = {name: pName, description: iDesc.getValue()};
+   /* "entry" names the module launcher.html imports (§3.2). New projects get
+      main.js, the default, so the field is documentation rather than
+      configuration until an author renames it. */
+   var appObj = {name: pName, description: iDesc.getValue(), entry: "main.js"};
    var appJson = JSON.stringify(appObj);
    appFile.open("acelery_app.json",path + "/" + pName);
    appFile.write(appJson,false);
    appFile.close();
+
+   /* Scaffold the entry module too. An empty project used to launch to a blank
+      page with nothing in the console; now it runs. */
+   var mainFile = new xFile();
+   mainFile.open("main.js",path + "/" + pName);
+   mainFile.write(
+      "export default function main(){\n" +
+      "   var nav = new xbNavBar(\"" + pName + "\");\n" +
+      "   new xbLayout(2,1).addElement(nav,0,0).setToTop();\n" +
+      "}\n", false);
+   mainFile.close();
+
    openProject(pName);
 }
 
@@ -931,7 +970,7 @@ function aCeleryConfig(){
       configDb.closeDB();
       acelery_theme = acSel.getValue();
       editor_theme = edSel.getValue();
-      LazyLoad.css(["/tools/codemirror/theme/" + editor_theme + ".css"]);
+      setEditorTheme(editor_theme);
       xAlertDialog("aCelery Configuration","Configuration Saved");
    }
 }
@@ -1006,7 +1045,7 @@ function aCeleryInit(){
       else
       if (row.cfg_key == "editortheme"){
          editor_theme = row.cfg_value;
-         LazyLoad.css(["/tools/codemirror/theme/" + editor_theme + ".css"]);
+         setEditorTheme(editor_theme);
       }   
    }
 }
@@ -1016,7 +1055,7 @@ function aCeleryInit(){
 
 var opt = xGetURLParameter("opt");
 reqCssFiles.push("/system/style/acelery.css");
-LazyLoad.css(reqCssFiles,function(){});
+reqCssFiles.forEach(function(href){ addStylesheet(href); });
 aCeleryInit();
 if (opt == "apps")
    listApps();

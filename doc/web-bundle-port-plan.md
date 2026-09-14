@@ -356,9 +356,29 @@ Planned in full in `doc/js-ui-framework-evaluation.md` §8. Progress:
    (1,941 → 1,793 lines). The host has never registered that channel, so they
    had been unreachable since Phase 2.
 
-**Still open:** 4c (widget layer), 4d (TableMaint, IDE, CodeMirror 6),
-4e (charts, native date inputs). Three product decisions gate 4c — see
-`js-ui-framework-evaluation.md` §9.
+**Phase 4c — the widget layer ✅ done (2026-09-14)**
+
+7. `web/src/ui/` → `acelery/ui.js`: Preact + htm + react-bootstrap on
+   `preact/compat`, 127 KB raw / 45 KB gzipped, plus a `<Form>` that collects
+   and validates its fields, labelled inputs that own their `for`/`id` pairing,
+   `<Panel>`, and `<Row>`/`<Col>` on the Bootstrap grid — aCelery's first
+   responsive layout.
+8. All 18 themes as rule deltas over one stock Bootstrap: **4.1 MB → 908 KB**.
+   CSS custom properties alone turned out not to retheme Bootstrap 5.3 at all;
+   see `js-ui-framework-evaluation.md` §3.4's correction.
+9. Import map and ES-module app loading in `launcher.html`; `acelery_app.json`
+   gains `"entry"`; `lazyload.js` deleted.
+
+Two host-side changes fell out of it, both recorded in `lib/`:
+
+- `BundleInstaller` now refreshes shipped sample apps while still never
+  touching a project the user created. It previously froze `www/user/Example`
+  at whatever version first installed.
+- Static responses carry `Cache-Control: no-cache`, so the WebView revalidates.
+  Without it, edit-then-Run served the previous version of a file.
+
+**Still open:** 4d (TableMaint, IDE rewrite, CodeMirror 6), 4e (charts, native
+date inputs). Decisions 7 and 8 in `js-ui-framework-evaluation.md` §9 remain.
 
 Also still outstanding, independent of the above:
 

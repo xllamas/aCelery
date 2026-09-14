@@ -68,14 +68,30 @@ class ACeleryServer {
     final static = createStaticHandler(
       paths.wwwRoot,
       defaultDocument: 'index.html',
-      // The bundle is rewritten in place by the IDE as the user edits files,
-      // so responses must never be cached.
       useHeaderBytesForContentType: true,
     );
 
+    /// Serves a static file, always revalidated.
+    ///
+    /// `shelf_static` sends `Last-Modified` and answers conditional requests,
+    /// but nothing tells the client it must ask. A WebView is then free to
+    /// pick its own freshness lifetime from the file's age and serve a stale
+    /// copy without a request — which it does, and which breaks the IDE's
+    /// whole loop: edit a file, hit Run, watch the previous version run.
+    /// Phase 4c hit exactly this, and an ES module is worse than a script was,
+    /// because the module map caches too.
+    ///
+    /// `no-cache` means "revalidate", not "don't store": the client still gets
+    /// a 304 for anything unchanged, over loopback, which costs nothing.
+    Future<Response> serveStatic(Request request) async {
+      final response = await static(request);
+      if (response.statusCode >= 400) return response;
+      return response.change(headers: {'Cache-Control': 'no-cache'});
+    }
+
     Future<Response> route(Request request) async {
       if (request.url.path == 'android.itf') return itf.call(request);
-      return static(request);
+      return serveStatic(request);
     }
 
     _server = await shelf_io.serve(

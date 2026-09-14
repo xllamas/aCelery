@@ -46,7 +46,23 @@ Future<void> extractArchive(
 /// one deliberate behaviour change: the Java version unzipped the whole tree
 /// unconditionally on every launch where it decided an update was due, which
 /// overwrote `www/user/`, `db/` and `files/` — i.e. it destroyed the user's
-/// projects and databases. Here those subtrees are never written to.
+/// projects and databases.
+///
+/// What is preserved, precisely:
+///
+///  * `db/`, `files/` and `log/` hold nothing but runtime data. Existing files
+///    there are never written to, full stop.
+///  * `www/user/` holds both: the projects the user made, and the sample app
+///    aCelery ships. A project the user created is never touched. A project
+///    that came out of the zip is *shipped content* and is refreshed, because
+///    the alternative is that it freezes at whatever version first installed —
+///    and the sample app is the reference documentation for authors
+///    (doc/js-ui-framework-evaluation.md §8 step 11), so a stale one is worse
+///    than useless. Phase 4c found this the hard way: the module launcher
+///    could not run an Example app still written against the 2014 loader.
+///
+/// A user who wants to modify the sample should copy it to a project of their
+/// own; editing it in place is editing a file the next upgrade will replace.
 class BundleInstaller {
   BundleInstaller({
     required this.paths,
@@ -84,8 +100,7 @@ class BundleInstaller {
     await extractArchive(
       await loadAsset(),
       Directory(paths.root),
-      // Never clobber user-created content: projects, databases, files, logs.
-      skip: (target) => _isUserData(target.path) && target.existsSync(),
+      skip: (target) => _preserve(target),
     );
 
     // The zip ships these as empty directories; make sure they exist even if a
@@ -98,8 +113,21 @@ class BundleInstaller {
     await _stampFile.writeAsString(bundleVersion);
   }
 
-  bool _isUserData(String absolutePath) {
-    final normalized = ACeleryPaths.normalize(absolutePath);
+  /// Whether an entry from the zip must leave the file already on disk alone.
+  ///
+  /// Only ever consulted for paths that are *in* the shipped zip, so a project
+  /// the user created is out of scope by construction — nothing in the archive
+  /// names it. See the class doc for the rule.
+  bool _preserve(File target) {
+    if (!target.existsSync()) return false;
+
+    final normalized = ACeleryPaths.normalize(target.path);
+    final userRoot = ACeleryPaths.normalize(paths.userRoot);
+
+    // A shipped sample app is shipped content; refresh it.
+    if (normalized.startsWith(userRoot)) return false;
+
+    // Everything else under db/, files/ and log/ is the user's alone.
     return paths.userDataRoots.any(
       (root) => normalized.startsWith(ACeleryPaths.normalize(root)),
     );

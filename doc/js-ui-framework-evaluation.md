@@ -514,7 +514,7 @@ Measured from this tree.
 | CodeMirror demo pages served to the LAN | 89 files | — | **0** ✅ 4a | included above |
 | Font Awesome 6, subset to icons used | 376 KB | ~60 KB | pending 4e | — |
 | Tempus Dominus | 136 KB | 0 | pending 4e | — — §3.9 |
-| `lazyload.js` | 13 KB | 0 | pending 4c.8 | — — §3.2 |
+| `lazyload.js` | 13 KB | 0 | **0** ✅ 4c.8 | **−13 KB** — §3.2 |
 | xScript widget layer → Preact + htm + react-bootstrap | ~91 KB | ~50 KB | **127 KB** (45 KB gz) ✅ 4c | **+36 KB** — §3.1a |
 | aCelery capability modules (added) | 0 | — | **60 KB** ✅ 4b | **+60 KB** |
 | Chart.js (added) | 0 | 203 KB | pending 4e | — |
@@ -684,7 +684,36 @@ second defect that had nothing to do with it:
    retint nothing in Bootstrap 5.3, so each theme became a rule *delta* over one
    stock Bootstrap. All 18 survive and are faithful rather than approximate.
 8. Import map + module loading in `launcher.html`; delete `lazyload.js` (§3.2).
-   **Next.**
+   ✅ **done (2026-09-14).** `launcher.html` declares the import map, reads
+   `"entry"` from `acelery_app.json` (default `main.js`), imports it as a
+   module and calls its default export — and reports a failure where the app
+   would have been, rather than the old blank page and silent console.
+   `lazyload.js` is deleted; the IDE's three remaining `LazyLoad.css` calls
+   became a six-line `addStylesheet`, which also fixes the editor theme
+   stacking a new `<link>` on every change. New projects are scaffolded with an
+   `entry` field and a runnable `main.js`.
+
+#### Three things this step turned up
+
+- **Modules are strict mode, which is the point.** `example.js` assigned to an
+  undeclared `e` at four sites; as a classic script that silently created a
+  global, as a module it throws. Exactly the class of bug §3.2 wants gone, found
+  the first time the app ran.
+- **The shipped sample app could never be updated.** `BundleInstaller` treated
+  everything under `www/user/` as user data and refused to overwrite it — so any
+  device that had ever launched aCelery kept a 2014-style `Example` the module
+  launcher cannot run, and §8 step 11's rewrite would never have arrived either.
+  The rule now distinguishes by what is *in the zip*: a project the user created
+  is never touched (nothing in the archive names it), a project that ships is
+  refreshed. `db/`, `files/` and `log/` remain untouchable.
+- **Static responses were cacheable, which breaks the IDE's whole loop.**
+  `shelf_static` sends `Last-Modified` and answers conditional requests, but
+  nothing told the WebView it had to ask, so it picked its own freshness
+  lifetime and served stale files with no request — edit, Run, watch the
+  previous version run. An ES module is worse than a script here, because the
+  module map caches as well. Static responses now carry `Cache-Control:
+  no-cache`, which means revalidate rather than don't store: unchanged files
+  still come back as a 304 over loopback.
 
 **Phase 4d — the product**
 9. `TableMaint` as a Preact component, with keyed rows (§3.5).

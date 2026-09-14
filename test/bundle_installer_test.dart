@@ -64,10 +64,11 @@ void main() {
     expect(await shipped.readAsString(), isNot('tampered'));
   });
 
-  test('a reinstall never touches user projects, databases or files', () async {
+  test('a reinstall never touches what the user made', () async {
     await installer().install();
 
-    // Stand in for what a user creates through the IDE.
+    // Stand in for what a user creates through the IDE. Nothing in the shipped
+    // zip names any of these, so the installer never even considers them.
     final project = File('${paths.userRoot}MyApp/main.js');
     await project.parent.create(recursive: true);
     await project.writeAsString('function main(){}');
@@ -75,21 +76,47 @@ void main() {
     await database.writeAsString('sqlite bytes');
     final userFile = File('${paths.filesRoot}notes.txt');
     await userFile.writeAsString('notes');
-
-    // The shipped Example app is user-editable too, so an upgrade must not
-    // revert edits to it. aCeleryUnzip.java overwrote all of this.
-    final example = File('${paths.userRoot}Example/example.js');
-    await example.writeAsString('// edited by the user');
+    final log = File('${paths.logRoot}session.log');
+    await log.parent.create(recursive: true);
+    await log.writeAsString('log lines');
 
     expect(await installer(version: '2.0.0').installIfNeeded(), isTrue);
 
     expect(await project.readAsString(), 'function main(){}');
     expect(await database.readAsString(), 'sqlite bytes');
     expect(await userFile.readAsString(), 'notes');
-    expect(await example.readAsString(), '// edited by the user');
+    expect(await log.readAsString(), 'log lines');
   });
 
-  test('a missing user file is restored on reinstall', () async {
+  test('a reinstall refreshes the shipped sample app', () async {
+    // Changed in Phase 4c. Treating the sample as user data froze it at
+    // whatever version first installed: a device that had ever launched
+    // aCelery kept a 2014-style Example that the module launcher cannot run,
+    // and Phase 4d's rewrite of it would never have arrived either. It is
+    // shipped content; a user who wants to change it copies it first.
+    await installer().install();
+
+    final example = File('${paths.userRoot}Example/example.js');
+    await example.writeAsString('// stale, from an older bundle');
+
+    expect(await installer(version: '2.0.0').installIfNeeded(), isTrue);
+    expect(await example.readAsString(), isNot(contains('stale')));
+  });
+
+  test('refreshing the sample leaves a neighbouring project alone', () async {
+    // The two live in the same directory, so the rule has to separate them by
+    // what is in the zip, not by where the file sits.
+    await installer().install();
+
+    final mine = File('${paths.userRoot}Example2/example.js');
+    await mine.parent.create(recursive: true);
+    await mine.writeAsString('// mine, not shipped');
+
+    await installer(version: '2.0.0').installIfNeeded();
+    expect(await mine.readAsString(), '// mine, not shipped');
+  });
+
+  test('a deleted shipped file is restored on reinstall', () async {
     await installer().install();
     await File('${paths.userRoot}Example/example.js').delete();
 

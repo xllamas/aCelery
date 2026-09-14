@@ -633,6 +633,83 @@ void main() {
     });
   });
 
+  group('Phase 4c — ES modules for user apps', () {
+    final launcher = File('bundle/www/system/launcher.html');
+
+    test('the launcher declares the import map apps rely on', () {
+      // Without it `import { openDB } from "acelery/sql.js"` is a bare
+      // specifier the browser refuses, and every app fails identically.
+      final html = launcher.readAsStringSync();
+      expect(html, contains('type="importmap"'));
+      expect(html, contains('"acelery/"'));
+      expect(html, contains('/tools/js/acelery/'));
+    });
+
+    test('the import map resolves to files that exist', () {
+      final html = launcher.readAsStringSync();
+      final prefix = RegExp(r'"acelery/"\s*:\s*"([^"]+)"').firstMatch(html);
+      expect(prefix, isNotNull);
+      final dir = Directory('bundle/www${prefix!.group(1)}');
+      expect(dir.existsSync(), isTrue, reason: dir.path);
+      for (final m in ['sql.js', 'file.js', 'http.js', 'export.js', 'ui.js']) {
+        expect(File('${dir.path}$m').existsSync(), isTrue, reason: m);
+      }
+    });
+
+    test('the launcher runs one entry module, not every loose file', () {
+      final html = launcher.readAsStringSync();
+      expect(html, contains('type="module"'));
+      expect(html, contains('await import('));
+      expect(html, contains('module.default'));
+      // The old contract: LazyLoad every .js in directory order, call a global.
+      expect(html, isNot(contains('LazyLoad.js')));
+    });
+
+    test('lazyload.js is gone and nothing still calls it', () {
+      expect(File('${tools.path}/js/lazyload.js').existsSync(), isFalse);
+      for (final page in pages) {
+        expect(read(page), isNot(contains('LazyLoad.')), reason: page.path);
+        expect(read(page), isNot(contains('js/lazyload.js')),
+            reason: page.path);
+      }
+    });
+
+    test('a failed app load is reported, not swallowed', () {
+      // The old launcher's failure mode was a blank page and a silent console.
+      final html = launcher.readAsStringSync();
+      expect(html, contains('alert-danger'));
+      expect(html, contains('e.stack'));
+    });
+
+    test('the manifest names an entry point, and the IDE writes one', () {
+      final manifest =
+          File('bundle/www/user/Example/acelery_app.json').readAsStringSync();
+      final decoded = jsonDecode(manifest) as Map<String, Object?>;
+      expect(decoded['entry'], 'example.js');
+
+      final ide = read(pages.first);
+      expect(ide, contains('entry: "main.js"'),
+          reason: 'new projects must get an entry field');
+      expect(ide, contains('export default function main'),
+          reason: 'new projects must get a runnable entry module');
+    });
+
+    test('the Example app exports its entry point', () {
+      // launcher.html imports it as a module; a global main() would not be
+      // reachable from one.
+      final js = File('bundle/www/user/Example/example.js').readAsStringSync();
+      expect(js, contains('export default function main'));
+    });
+
+    test('the shipped entry module is what the manifest names', () {
+      final decoded = jsonDecode(
+              File('bundle/www/user/Example/acelery_app.json').readAsStringSync())
+          as Map<String, Object?>;
+      expect(File('bundle/www/user/Example/${decoded['entry']}').existsSync(),
+          isTrue);
+    });
+  });
+
   group('the built zip matches the source tree', () {
     test('assets/aCelery.zip is not stale', () {
       // tool/build_bundle.sh packs bundle/ into the asset; a forgotten rebuild
@@ -646,6 +723,7 @@ void main() {
       expect(listing, contains('aCelery/www/tools/js/bootstrap.bundle.min.js'));
       expect(listing, isNot(contains('jquery.min.js')));
       expect(listing, isNot(contains('xscript_bootstrap.js')));
+      expect(listing, isNot(contains('js/lazyload.js')));
       // Phase 4a's pruning has to reach the device, not just the source tree.
       expect(listing, isNot(contains('codemirror/keymap/')));
       expect(listing, isNot(contains('codemirror/addon/')));
