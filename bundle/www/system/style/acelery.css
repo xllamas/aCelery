@@ -1,85 +1,18 @@
-/*  Copyright 2014: Xavier Llamas Rolland                      */ 
-/*                                                             */
-/*  This software distributed under the GPLv3 License          */
-/*                                                             */
-////////////////////////////////////////////////////////////////
+/* The system shell's own styles.
 
+   The Bootstrap-3-era rules that used to live here propped up xbLayout's
+   HTML-table layout and a navbar that no longer exists. What is left is the
+   one thing Bootstrap has no class for: an editor that fills the space below
+   the navbar. */
 
-   /*    Layout         */
+.acelery-editor {
+  /* The navbar is the only thing above it, and its height varies with whether
+     the collapse is open, so this is a floor rather than an exact fit. */
+  height: calc(100vh - 8rem);
+  min-height: 20rem;
+  overflow: hidden;
+}
 
-   td.acelery_layout {
-      padding-top: 0px;
-      padding-bottom: 0px;
-      padding-left: 0px;
-      padding-right: 0px;
-      margin-top: 0px;
-      margin-bottom: 0px;
-      margin-left: 0px;
-      margin-right: 0px;
-      vertical-align: top;          
-   }
-   
-   /* Navbar */
-   
-   .acelery_navbar{
-      margin-bottom: 0px;
-   }
-   
-   /* Select alert */
-   
-   .acelery_selalert{
-      margin-bottom: 0px;
-   }
-   
-   /* Editor */
-      
-   .CodeMirror{
-      height: auto;
-   }
-   
-   /*  Error Log */
-   
-   td.error_log_layout {
-      padding-top: 5px;
-      padding-bottom: 0px;
-      padding-left: 5px;
-      padding-right: 5px;
-      vertical-align: top;          
-   }
-   
-   .log {
-      overflow-x: scroll;
-      overflow-y: scroll;
-   }
-   
-   .logcat{
-      font-size: 14px;
-      padding: 15px;
-      margin-bottom: 15px;
-      border: 1px solid transparent;
-      border-radius: 4px;
-   }
-   .logcat.I{
-      color: #3C763D;
-      background-color: #DFF0D8;
-      border-color:#D6E9C6;
-   }
-   .logcat.D{
-      color: #A94442;
-      background-color: #F2DEDE;
-      border-color:#EBCCD1;
-   }
-   .logcat.E{
-      color: #A94442;
-      background-color: #F2DEDE;
-      border-color:#EBCCD1;
-   }
-   .logcat.W{
-      color: #8A6D3B;
-      background-color: #FCF8E3;
-      border-color:#FAEBCC;
-   }
-   
-   
-   
-
+.acelery-editor .cm-editor {
+  height: 100%;
+}

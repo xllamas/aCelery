@@ -38,6 +38,21 @@ void main() {
   Future<http.Response> post(String query, String body) =>
       http.post(itf.replace(query: query), body: body);
 
+  /// Mirrors the Phase 4b async bridge: POST a JSON body, get JSON back.
+  Future<http.Response> postJson(String query, Map<String, Object?> body) =>
+      http.post(
+        itf.replace(query: query),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      );
+
+  Future<Map<String, dynamic>> callJson(
+      String query, Map<String, Object?> body) async {
+    final response = await postJson(query, body);
+    expect(response.statusCode, 200, reason: '$query ${response.body}');
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   /// xScript base64-encodes SQL with `btoa()`.
   String enc(String sql) => base64.encode(utf8.encode(sql));
 
@@ -142,6 +157,290 @@ void main() {
       final response = await raw('opt=sql&action=select&handle=$handle'
           '&query=${enc('select * from nope')}');
       expect(response.statusCode, 500);
+    });
+  });
+
+  group('opt=sql — the Phase 4b async routes', () {
+    // These replace the cursor protocol: one round-trip per statement instead
+    // of one per row, and bound parameters instead of concatenated SQL.
+    // See doc/js-ui-framework-evaluation.md §3.3.
+
+    Future<String> openDb() async =>
+        (await get('opt=sql&action=opendb&path=async.db'))['handle'] as String;
+
+    test('query returns the whole result set in one call', () async {
+      final handle = await openDb();
+      await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'create table person (mname text, age integer)',
+      });
+      for (final (name, age) in [('Ada', 36), ('Grace', 45), ('Alan', 41)]) {
+        await callJson('opt=sql&action=insertrow', {
+          'handle': handle,
+          'sql': 'insert into person values (?, ?)',
+          'args': [name, age],
+        });
+      }
+
+      final rows = (await callJson('opt=sql&action=query', {
+        'handle': handle,
+        'sql': 'select * from person order by mname',
+      }))['rows'] as List;
+
+      expect(rows, hasLength(3));
+      expect(rows.map((r) => r['mname']), ['Ada', 'Alan', 'Grace']);
+    });
+
+    test('columns keep their SQLite types', () async {
+      // The cursor routes stringify every column because android.database
+      // .Cursor did. Nothing carries that contract into the async API.
+      final handle = await openDb();
+      await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'create table t (n integer, x real, s text, z text)',
+      });
+      await callJson('opt=sql&action=insertrow', {
+        'handle': handle,
+        'sql': 'insert into t values (?, ?, ?, ?)',
+        'args': [7, 1.5, 'seven', null],
+      });
+
+      final rows = (await callJson(
+          'opt=sql&action=query', {'handle': handle, 'sql': 'select * from t'}))['rows'] as List;
+      expect(rows.single['n'], 7);
+      expect(rows.single['x'], 1.5);
+      expect(rows.single['s'], 'seven');
+      expect(rows.single['z'], isNull);
+    });
+
+    test('arguments are bound, not interpolated', () async {
+      // The whole point of the route: a value containing a quote is data.
+      final handle = await openDb();
+      await callJson('opt=sql&action=run',
+          {'handle': handle, 'sql': 'create table t (v text)'});
+
+      const nasty = "Robert'); drop table t;--";
+      await callJson('opt=sql&action=insertrow',
+          {'handle': handle, 'sql': 'insert into t values (?)', 'args': [nasty]});
+
+      final rows = (await callJson('opt=sql&action=query',
+          {'handle': handle, 'sql': 'select v from t'}))['rows'] as List;
+      expect(rows.single['v'], nasty);
+    });
+
+    test('run reports how many rows it changed', () async {
+      final handle = await openDb();
+      await callJson('opt=sql&action=run',
+          {'handle': handle, 'sql': 'create table t (v integer)'});
+      for (final v in [1, 2, 3]) {
+        await callJson('opt=sql&action=insertrow',
+            {'handle': handle, 'sql': 'insert into t values (?)', 'args': [v]});
+      }
+
+      final changed = (await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'update t set v = v + 1 where v > ?',
+        'args': [1],
+      }))['changes'];
+      expect(changed, 2);
+    });
+
+    test('insertrow returns the new rowid', () async {
+      final handle = await openDb();
+      await callJson('opt=sql&action=run',
+          {'handle': handle, 'sql': 'create table t (v text)'});
+      final first = (await callJson('opt=sql&action=insertrow',
+          {'handle': handle, 'sql': "insert into t values ('a')"}))['rowid'];
+      final second = (await callJson('opt=sql&action=insertrow',
+          {'handle': handle, 'sql': "insert into t values ('b')"}))['rowid'];
+      expect(first, 1);
+      expect(second, 2);
+    });
+
+    test('a booleans binds as SQLite stores it', () async {
+      final handle = await openDb();
+      await callJson('opt=sql&action=run',
+          {'handle': handle, 'sql': 'create table t (done integer)'});
+      await callJson('opt=sql&action=insertrow', {
+        'handle': handle,
+        'sql': 'insert into t values (?)',
+        'args': [true],
+      });
+      final rows = (await callJson('opt=sql&action=query',
+          {'handle': handle, 'sql': 'select done from t'}))['rows'] as List;
+      expect(rows.single['done'], 1);
+    });
+
+    test('a bad statement comes back with its message', () async {
+      // The cursor routes swallow this and return -1. An app author debugging
+      // a typo needs to read what SQLite said.
+      final handle = await openDb();
+      final response = await postJson('opt=sql&action=query',
+          {'handle': handle, 'sql': 'select * from nope'});
+      expect(response.statusCode, 500);
+      expect(jsonDecode(response.body)['error'], contains('nope'));
+    });
+
+    test('an unknown database handle is an error, not an empty result', () {
+      return expectLater(
+        postJson('opt=sql&action=query', {'handle': 999, 'sql': 'select 1'})
+            .then((r) => r.statusCode),
+        completion(500),
+      );
+    });
+
+    test('a malformed body is a bad request', () async {
+      expect((await postJson('opt=sql&action=query', {'sql': 'select 1'}))
+          .statusCode, 400);
+      expect((await postJson('opt=sql&action=query', {'handle': 1})).statusCode,
+          400);
+      expect(
+        (await http.post(itf.replace(query: 'opt=sql&action=query'),
+                body: 'not json'))
+            .statusCode,
+        400,
+      );
+    });
+
+    test('the async routes never cache', () async {
+      final handle = await openDb();
+      await callJson('opt=sql&action=run',
+          {'handle': handle, 'sql': 'create table t (v integer)'});
+      final response = await postJson(
+          'opt=sql&action=query', {'handle': handle, 'sql': 'select * from t'});
+      expect(response.headers['cache-control'], contains('no-cache'));
+    });
+  });
+
+  group('the SQL TableMaint emits is valid against real SQLite', () {
+    // web/test/table_maint.test.js pins which statements the component sends,
+    // against a stub. This pins that those statements actually run — the two
+    // halves of the same contract, and neither is sufficient alone. Phase 3
+    // shipped a break of exactly this shape: each side checked, the seam not.
+
+    late String handle;
+
+    setUp(() async {
+      handle = (await get('opt=sql&action=opendb&path=tm.db'))['handle']
+          as String;
+      await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'create table person (mname text, email text, age integer)',
+      });
+      await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'create table phone (person integer, number text)',
+      });
+      for (final (name, mail, age) in [
+        ('Ada', 'ada@example.com', 36),
+        ('Grace', 'grace@example.com', 45),
+        ('Alan', 'alan@example.com', 41),
+      ]) {
+        await callJson('opt=sql&action=insertrow', {
+          'handle': handle,
+          'sql': 'insert into person (mname, email, age) values (?, ?, ?)',
+          'args': [name, mail, age],
+        });
+      }
+    });
+
+    Future<List> select(String sql, [List<Object?> args = const []]) async =>
+        (await callJson(
+            'opt=sql&action=query', {'handle': handle, 'sql': sql, 'args': args}))['rows'] as List;
+
+    test('the list page query runs and pages by rowid', () async {
+      final first = await select(
+          'select rowid, * from person where rowid >= ? order by rowid asc limit 2',
+          [0]);
+      expect(first, hasLength(2));
+      expect(first.first['mname'], 'Ada');
+
+      final next = await select(
+          'select rowid, * from person where rowid >= ? order by rowid asc limit 2',
+          [(first.last['rowid'] as int) + 1]);
+      expect(next.single['mname'], 'Alan');
+    });
+
+    test('paging backwards reverses, as the Prev button does', () async {
+      final back = await select(
+          'select rowid, * from person where rowid <= ? order by rowid desc limit 2',
+          [3]);
+      expect(back.map((r) => r['mname']), ['Alan', 'Grace']);
+    });
+
+    test('the record query binds its rowid', () async {
+      final row = await select('select rowid, * from person where rowid = ?', [2]);
+      expect(row.single['mname'], 'Grace');
+    });
+
+    test('a prefix search matches, and cannot be escaped', () async {
+      expect(await select('select rowid, * from person where ((mname like ?))', ['A%']),
+          hasLength(2));
+
+      // A value that would close the quote in a concatenated statement.
+      final nasty = await select(
+          'select rowid, * from person where ((mname like ?))', ["A%' or '1'='1"]);
+      expect(nasty, isEmpty, reason: 'the argument was treated as data');
+    });
+
+    test('a numeric range search runs — the query that never worked', () async {
+      // xbTableMaint.findResult interpolated `fld.getName`, the function
+      // object, so the statement it built was not valid SQL at all.
+      final rows = await select(
+          'select rowid, * from person where ((age >= ? and age <= ?))', [40, 46]);
+      expect(rows.map((r) => r['mname']), ['Grace', 'Alan']);
+    });
+
+    test('insert, update and delete round-trip with placeholders', () async {
+      final rowid = (await callJson('opt=sql&action=insertrow', {
+        'handle': handle,
+        'sql': 'insert into person (mname, email, age) values (?, ?, ?)',
+        'args': ['Edsger', 'e@example.com', 72],
+      }))['rowid'];
+
+      await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'update person set mname = ?, email = ?, age = ? where rowid = ?',
+        'args': ['Edsger D', 'e@example.com', 72, rowid],
+      });
+      expect(
+        (await select('select mname from person where rowid = ?', [rowid]))
+            .single['mname'],
+        'Edsger D',
+      );
+
+      await callJson('opt=sql&action=run', {
+        'handle': handle,
+        'sql': 'delete from person where rowid = ?',
+        'args': [rowid],
+      });
+      expect(await select('select rowid from person where rowid = ?', [rowid]),
+          isEmpty);
+    });
+
+    test('a linked table filters by its link column', () async {
+      await callJson('opt=sql&action=insertrow', {
+        'handle': handle,
+        'sql': 'insert into phone (person, number) values (?, ?)',
+        'args': [1, '555'],
+      });
+      final rows = await select(
+          'select rowid, * from phone where person = ? and rowid >= ? '
+          'order by rowid asc',
+          [1, 0]);
+      expect(rows.single['number'], '555');
+    });
+
+    test('a null binds as NULL, not as the string "null"', () async {
+      final rowid = (await callJson('opt=sql&action=insertrow', {
+        'handle': handle,
+        'sql': 'insert into person (mname, email, age) values (?, ?, ?)',
+        'args': ['Nulls', 'n@example.com', null],
+      }))['rowid'];
+      final row = await select('select age from person where rowid = ?', [rowid]);
+      expect(row.single['age'], isNull);
+      expect(await select('select rowid from person where age is null'),
+          hasLength(1));
     });
   });
 
@@ -285,6 +584,18 @@ void main() {
   });
 
   group('static files', () {
+    test('a static response must be revalidated, never reused blind', () async {
+      // shelf_static sends Last-Modified but nothing tells the client it has
+      // to ask. A WebView then picks its own freshness lifetime and serves a
+      // stale file without a request, which breaks the IDE's edit-then-Run
+      // loop — and an ES module caches harder than a script did.
+      await File('${paths.wwwRoot}app.js').writeAsString('export default 1;');
+      final response = await http
+          .get(Uri.parse('http://127.0.0.1:${server.boundPort}/app.js'));
+      expect(response.statusCode, 200);
+      expect(response.headers['cache-control'], contains('no-cache'));
+    });
+
     test('the www tree is served', () async {
       await File('${paths.wwwRoot}index.html').writeAsString('<html>hi</html>');
       final response =

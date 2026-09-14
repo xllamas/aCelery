@@ -36,7 +36,7 @@ class ItfHandler {
   Future<Response> call(Request request) async {
     final q = request.url.queryParameters;
     return switch (q['opt']) {
-      'sql' => await _sql(q),
+      'sql' => await _sql(request, q),
       'file' => await _file(request, q),
       'http' => await _http(request, q),
       'export' => await _export(request, q),
@@ -86,8 +86,19 @@ class ItfHandler {
 
   // -------------------------------------------------------------------- sql
 
-  Future<Response> _sql(Map<String, String> q) async {
+  Future<Response> _sql(Request request, Map<String, String> q) async {
     switch (q['action']) {
+      // --------------------------------------------- Phase 4b: the async API
+      //
+      // POST with a JSON body `{handle, sql, args}`. The body carries the SQL
+      // so it needs neither base64 (which was transport encoding, not escaping)
+      // nor a URL long enough to hold it, and `args` are bound by SQLite
+      // rather than concatenated in. See doc/js-ui-framework-evaluation.md §3.3.
+      case 'query':
+      case 'run':
+      case 'insertrow':
+        return _asyncSql(request, q['action']!);
+
       case 'opendb':
         final path = q['path'];
         if (path == null) return _badRequest;
@@ -160,6 +171,47 @@ class ItfHandler {
 
       default:
         return _badRequest;
+    }
+  }
+
+  /// The three parameterised routes share a body shape, so they share a
+  /// decoder. A malformed body is a bad request; a statement SQLite refuses is
+  /// a 500 carrying the message, because an app author needs to read it.
+  Future<Response> _asyncSql(Request request, String action) async {
+    final Object? body;
+    try {
+      body = jsonDecode(await request.readAsString());
+    } on FormatException {
+      return _badRequest;
+    }
+    if (body is! Map<String, Object?>) return _badRequest;
+
+    final handle = switch (body['handle']) {
+      final int h => h,
+      final String h => int.tryParse(h),
+      _ => null,
+    };
+    final sql = body['sql'];
+    if (handle == null || sql is! String) return _badRequest;
+
+    final rawArgs = body['args'] ?? const [];
+    if (rawArgs is! List) return _badRequest;
+    final args = List<Object?>.from(rawArgs);
+
+    try {
+      return switch (action) {
+        'query' => _json({'rows': await this.sql.query(handle, sql, args)}),
+        'run' => _json({'changes': await this.sql.run(handle, sql, args)}),
+        _ => _json({'rowid': await this.sql.insertRow(handle, sql, args)}),
+      };
+    } on SqlError catch (e) {
+      return Response.internalServerError(
+        body: jsonEncode({'error': e.message}),
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          ..._noCache,
+        },
+      );
     }
   }
 

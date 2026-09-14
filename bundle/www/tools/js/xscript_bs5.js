@@ -397,175 +397,110 @@ xbMultiSelect.prototype.getValues = function(){
    return values;
 }
 
+/* xbDateTimePicker, xbDatePicker, xbTimePicker
+
+   These were Tempus Dominus 6: 136 KB of JavaScript and CSS for three widgets,
+   plus a dependency on Popper and on Font Awesome's chevrons and arrows.
+
+   Both target runtimes render the OS picker for <input type="date">,
+   "time" and "datetime-local" — bigger touch targets, familiar gestures,
+   the user's own locale and calendar, and accessibility for free. On a
+   phone-first product that is the better control as well as the smaller one
+   (doc/js-ui-framework-evaluation.md §3.9).
+
+   The public API is unchanged, so an app written against these keeps working:
+   setMinDate, setMaxDate, getValue, setValue, run and destroy all still mean
+   what they meant. Two things are necessarily different, because the platform
+   control owns them:
+
+     - `noManual` and the icon argument are accepted and ignored. A native
+       picker has no separate text field to lock, and draws its own affordance.
+     - setDisabledDates has no equivalent: min and max are the only
+       restrictions <input type=date> understands. It is kept as a no-op that
+       says so once, rather than removed, so an app that calls it degrades to
+       an unrestricted picker instead of throwing. */
+
 function xbDateTimePicker(label,name,noManual,icon,clss,wclss){
    xInput.call(this,clss || "form-control","mb-3 " + (wclss || ""));
-   this.format = "yyyy-MM-dd HH:mm"; // Tempus Dominus 6 usa este formato
-   this.icon = (icon || "fa-solid fa-calendar fa-fw");
-   this.mindate = null;
    this.iname = name;
-   this.tempusPicker = null; // Instancia de Tempus Dominus
-   
+   this.inputType = "datetime-local";
+
    this.node = document.createElement("div");
    this.node.id = this.id + "_w";
    this.node.className = this.wclss;
-      
-   var l = "<label class='form-label fw-bold' for='" + name + "'>" + label + "</label>";
-   var i = "<div class='input-group' id='" + this.id + "_ig" + "' data-td-target-input='nearest' data-td-target-toggle='nearest'>" +
-           "<input type='text" +
-           "' id='" + this.id +
-           "' name='" + name +
-           "' class='" + this.clss +
-           "' data-td-target-input='nearest'" + (noManual ? " readonly" : "") + ">" +
-           "<span class='input-group-text' data-td-icon-next='fa-solid fa-chevron-right'>" +
-           "<i class='" + this.icon + "'></i>" +
-           "</span>" +
-           "</div>";
-   this.node.innerHTML = l + i;
+
+   var lab = document.createElement("label");
+   lab.className = "form-label fw-bold";
+   lab.htmlFor = this.id;
+   lab.textContent = label;
+
+   var input = document.createElement("input");
+   input.type = this.inputType;
+   input.id = this.id;
+   input.name = name;
+   input.className = this.clss;
+
+   this.node.appendChild(lab);
+   this.node.appendChild(input);
 }
 
 xbDateTimePicker.prototype = new xInput();
 
+xbDateTimePicker.prototype.getInputElement = function(){
+   return this.node.querySelector("input");
+}
+
 xbDateTimePicker.prototype.setError = function(e){
-   if (e)
+   var input = this.getInputElement();
+   if (e){
       this.node.classList.add("has-validation");
-   else
+      input.classList.add("is-invalid");
+   }
+   else{
       this.node.classList.remove("has-validation");
+      input.classList.remove("is-invalid");
+   }
    return this;
 }
 
 xbDateTimePicker.prototype.setMinDate = function(date){
    this.mindate = date;
-   if (this.tempusPicker){
-      this.tempusPicker.minDate = date;
-   }
+   this.getInputElement().min = date;
    return this;
 }
 
 xbDateTimePicker.prototype.setMaxDate = function(date){
    this.maxdate = date;
-   if (this.tempusPicker){
-      this.tempusPicker.maxDate = date;
-   }
+   this.getInputElement().max = date;
    return this;
 }
 
-xbDateTimePicker.prototype.setDisabledDates = function(dateRanges){
-   var dates = [];
-   for (var i = 0; i < dateRanges.length; i++){
-      var d = new Date(dateRanges[i].fecha_ini + "T00:00:00");
-      var end = new Date(dateRanges[i].fecha_fin + "T00:00:00");
-      while (d <= end){
-         dates.push(new Date(d));
-         d.setDate(d.getDate() + 1);
-      }
-   }
-   this.disableddates = dates;
-   if (this.tempusPicker){
-      this.tempusPicker.updateOptions({restrictions: {disabledDates: dates}});
+xbDateTimePicker.prototype.setDisabledDates = function(){
+   if (!xbDateTimePicker.warnedAboutDisabledDates){
+      xbDateTimePicker.warnedAboutDisabledDates = true;
+      console.warn("setDisabledDates: a native date input supports min and " +
+                   "max only. The picker is unrestricted.");
    }
    return this;
 }
 
 xbDateTimePicker.prototype.getValue = function(){
-   /*
-   if (this.tempusPicker && this.tempusPicker.viewDate){
-      return this.tempusPicker.viewDate;
-   }
-   */
-   return this.node.querySelector("input").value;
+   return this.getInputElement().value;
 }
 
 xbDateTimePicker.prototype.setValue = function(value){
-   if (this.tempusPicker){
-      this.tempusPicker.viewDate = value;
-   }
-   else{
-      this.node.querySelector("input").value = value;
-   }
+   this.getInputElement().value = value || "";
    return this;
 }
 
+/* Kept so an app that called these against Tempus Dominus still runs. The
+   platform control needs neither. */
+
 xbDateTimePicker.prototype.run = function(){
-   var options = {
-      localization: {
-         locale: 'es',
-         format: this.format,
-         hourCycle: 'h24'
-      },
-      display: {
-         icons: {
-            type: 'icons',
-            time: 'fa-solid fa-clock',
-            date: 'fa-solid fa-calendar',
-            up: 'fa-solid fa-arrow-up',
-            down: 'fa-solid fa-arrow-down',
-            previous: 'fa-solid fa-chevron-left',
-            next: 'fa-solid fa-chevron-right',
-            today: 'fa-solid fa-calendar-check',
-            clear: 'fa-solid fa-trash',
-            close: 'fa-solid fa-xmark'
-         },
-         sideBySide: false,
-         calendarWeeks: false,
-         viewMode: 'calendar',
-         keepOpen: false,
-         inline: false,
-         theme: 'light'
-      },
-      meta: {
-         timeZone: 'UTC',
-         useUTC: true
-      }
-   };
-
-   // Aplicar formato según el tipo de picker
-   if (this.format){
-      options.localization.format = this.format;
-   }
-
-   // Aplicar minDate si existe
-   if (this.mindate){
-      options.restrictions = options.restrictions || {};
-      options.restrictions.minDate = this.mindate;
-   }
-
-   // Aplicar maxDate si existe
-   if (this.maxdate){
-      options.restrictions = options.restrictions || {};
-      options.restrictions.maxDate = this.maxdate;
-   }
-
-   // Aplicar fechas deshabilitadas si existen
-   if (this.disableddates){
-      options.restrictions = options.restrictions || {};
-      options.restrictions.disabledDates = this.disableddates;
-   }
-
-   try {
-      // Inicializar Tempus Dominus
-      var element = document.getElementById(this.id);
-      this.tempusPicker = new tempusDominus.TempusDominus(element, options);
-      var tp = this.tempusPicker;
-      var div = document.getElementById(this.id + "_ig");
-      var span = div.querySelectorAll("span");
-      span[0].addEventListener("click", function(e){
-            tp.show();
-            e.preventDefault();
-            e.stopPropagation();
-         });
-   }
-   catch(e){
-      console.error("Error inicializando Tempus Dominus: " + e);
-   }
-
    return this;
 }
 
 xbDateTimePicker.prototype.destroy = function(){
-   if (this.tempusPicker){
-      this.tempusPicker.dispose();
-      this.tempusPicker = null;
-   }
    return this;
 }
 
@@ -573,7 +508,8 @@ xbDateTimePicker.prototype.destroy = function(){
 
 function xbDatePicker(label,name,noManual,icon,clss,wclss){
    xbDateTimePicker.call(this,label,name,noManual,icon,clss,wclss);
-   this.format = "yyyy-MM-dd"; // Tempus Dominus 6 usa este formato
+   this.inputType = "date";
+   this.getInputElement().type = "date";
 }
 
 xbDatePicker.prototype = new xbDateTimePicker();
@@ -581,8 +517,9 @@ xbDatePicker.prototype = new xbDateTimePicker();
 /* xbTimePicker */
 
 function xbTimePicker(label,name,noManual,icon,clss,wclss){
-   xbDateTimePicker.call(this,label,name,noManual,(icon || "fa-solid fa-clock fa-fw"),clss,wclss);
-   this.format = "HH:mm"; // Tempus Dominus 6 usa este formato
+   xbDateTimePicker.call(this,label,name,noManual,icon,clss,wclss);
+   this.inputType = "time";
+   this.getInputElement().type = "time";
 }
 
 xbTimePicker.prototype = new xbDateTimePicker();
@@ -1005,7 +942,12 @@ xbTabPane.prototype = new xSection();
 
 function xbNavBar(title,clss,lclss){
    xSection.call(this,"navbar navbar-expand-lg bg-body-tertiary " + (clss || ""));
-   this.node.setAttribute("data-bs-theme","light");
+   /* No data-bs-theme here. Pinning the navbar to "light" was harmless while
+      every theme was a self-contained stylesheet and none of them put the
+      document into Bootstrap's dark colour mode. Since §3.4 made dark mode
+      real, a pinned navbar stays light under Darkly, Cyborg, Slate and
+      Superhero while everything below it goes dark. Inheriting from <html> is
+      what bg-body-tertiary was always meant to do. */
 
    var cont = document.createElement("div");
    cont.className = "container-fluid";
@@ -1081,9 +1023,34 @@ xbNavBar.prototype.getNavItem = function(index){
    return this.elements[index];
 }
 
-xbNavBar.prototype.setTitle = function(title){
+/* The Bootstrap 3 library exposed the brand as `this.navA`, an xLink, and the
+   IDE set its innerHTML directly. xscript5 keeps the brand private and offers
+   this instead, so the same block-in-an-anchor and escaping problems as
+   addTitleWrapper apply here and are handled the same way:
+
+     nav.setTitle("aCelery Project: " + name, "h4")
+
+   `wrapper` is optional; h1-h6 render as a span carrying Bootstrap's matching
+   .h1-.h6 class rather than a real heading, which keeps the typography without
+   putting a block box inside the anchor. The title is set as text, so a project
+   name containing a "<" stays a project name. */
+
+xbNavBar.prototype.setTitle = function(title,wrapper){
    var brand = this.node.querySelector(".navbar-brand");
-   if (brand) brand.innerHTML = title;
+   if (!brand) return this;
+
+   brand.textContent = "";
+   if (wrapper){
+      var isHeading = /^h[1-6]$/i.test(wrapper);
+      var el = document.createElement(isHeading ? "span" : wrapper);
+      if (isHeading)
+         el.className = wrapper.toLowerCase() + " mb-0";
+      el.textContent = title;
+      brand.appendChild(el);
+   }
+   else
+      brand.textContent = title;
+
    return this;
 }
 
@@ -1124,13 +1091,31 @@ xbNavBarDropdown.prototype.getToggle = function(){
    return this.node.querySelector("a.dropdown-toggle");
 }
 
-/* Restored: the IDE wraps its dropdown titles in an <h4>. */
+/* Restored: the IDE wraps its dropdown titles in an <h4>.
+
+   A real <h4> is a block element, and an inline <a> containing one is split
+   into anonymous blocks: the heading's text then sits outside the anchor's own
+   hit area, so only Bootstrap's ::after caret stays clickable, on a line of its
+   own. That was invisible in quirks mode and appeared the moment the pages got
+   a doctype (evaluation §7.1). Bootstrap 5 ships .h1-.h6 for exactly this --
+   heading typography without a heading box -- so the wrapper becomes a span
+   carrying the class. It looks the same and the whole title is clickable.
+
+   The title is set as text rather than markup, so a title containing a "<"
+   is a title rather than an element (§7.4). */
 
 xbNavBarDropdown.prototype.addTitleWrapper = function(w){
    this.titleWrapper = w;
    var a = this.getToggle();
-   if (a)
-      a.innerHTML = "<" + w + ">" + this.title + "</" + w + ">";
+   if (a){
+      var isHeading = /^h[1-6]$/i.test(w);
+      var span = document.createElement(isHeading ? "span" : w);
+      if (isHeading)
+         span.className = w.toLowerCase() + " mb-0";
+      span.textContent = this.title;
+      a.textContent = "";
+      a.appendChild(span);
+   }
    return this;
 }
 
@@ -1551,20 +1536,38 @@ function xbTheme(label,ct){
 
 xbTheme.prototype = new xbSelect();
 
+/* Themes that ask Bootstrap for its dark colour mode. */
+
+xbTheme.darkThemes = ["cyborg","darkly","slate","superhero"];
+
+/* A theme used to be a self-contained 228 KB Bootswatch build, swapped whole,
+   from a directory of 18 totalling 4.1 MB. It is now a delta over one stock
+   Bootstrap: the rules where that theme differs, 30-80 KB, scoped under a
+   data-acelery-theme attribute (§3.4, and tool/build_themes.mjs for why
+   CSS variables alone could not do this).
+
+   Same operation as acelery/ui.js's applyTheme(); both write the attribute the
+   delta stylesheets key off, so the two cannot drift. */
+
 xbTheme.prototype.setTheme = function(th){
-   var link = document.createElement("link");
-       link.id = "xbtheme";
-       link.type = "text/css";
-       link.rel = "stylesheet";
-       link.href = "/tools/css/bootstrap_themes/" + th.toLowerCase() + "/bootstrap.min.css";
-   var head = document.getElementsByTagName("head")[0];
-   var plink = document.getElementById("xbtheme");
-   if (plink)
-      head.removeChild(plink);
-   head.appendChild(link);
-   this.currTheme = th;
-   if (reqCssFiles.length > 0)
-      LazyLoad.css(reqCssFiles,function(){});
+   var theme = (th || "acelery").toLowerCase();
+   var root = document.documentElement;
+
+   var link = document.getElementById("xbtheme");
+   if (!link){
+      link = document.createElement("link");
+      link.id = "xbtheme";
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+   }
+   link.href = "/tools/css/themes/" + theme + ".css";
+
+   root.setAttribute("data-acelery-theme",theme);
+   root.setAttribute("data-bs-theme",
+      xbTheme.darkThemes.indexOf(theme) >= 0 ? "dark" : "light");
+
+   this.currTheme = theme;
+   return this;
 }
 
 /*  xbCarousel  */

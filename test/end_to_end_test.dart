@@ -54,19 +54,64 @@ void main() {
       expect(response.body, contains('/system/index.html'));
     });
 
-    test('the IDE page and its script tags resolve', () async {
+    test('the IDE page carries no classic scripts at all', () async {
+      // Phase 4d: the shell is a component tree, so xscript.js,
+      // bootstrap.bundle.min.js and Tempus Dominus all left the page.
+      // react-bootstrap implements the interactive components itself, which is
+      // what makes Bootstrap's own JavaScript droppable (§3.1a).
       final page = await http.get(Uri.parse('$origin/system/index.html'));
       expect(page.statusCode, 200);
+      expect(RegExp(r'<script src=').hasMatch(page.body), isFalse,
+          reason: page.body);
 
-      final srcs = RegExp(r'src="(/[^"]+)"')
+      // The page's own comment names what it dropped, so check the markup
+      // rather than the prose.
+      final markup = page.body.replaceAll(RegExp(r'<!--.*?-->', dotAll: true), '');
+      for (final gone in [
+        'xscript.js',
+        'bootstrap.bundle.min.js',
+        'tempus-dominus',
+      ]) {
+        expect(markup, isNot(contains(gone)), reason: gone);
+      }
+    });
+
+    test('every module the IDE imports resolves and is a module', () async {
+      // An import map maps a prefix, so a typo in a specifier is a 404 the
+      // page reports only in the console.
+      final page = await http.get(Uri.parse('$origin/system/index.html'));
+      final specifiers = RegExp(r'from "acelery/([^"]+)"')
           .allMatches(page.body)
           .map((m) => m.group(1)!)
           .toSet();
-      expect(srcs, isNotEmpty);
+      expect(specifiers, isNotEmpty);
 
-      for (final src in srcs) {
-        final asset = await http.get(Uri.parse('$origin$src'));
-        expect(asset.statusCode, 200, reason: src);
+      for (final name in specifiers) {
+        final asset =
+            await http.get(Uri.parse('$origin/tools/js/acelery/$name'));
+        expect(asset.statusCode, 200, reason: name);
+        // A module script is refused unless it is served as JavaScript.
+        expect(asset.headers['content-type'], contains('javascript'),
+            reason: name);
+      }
+    });
+
+    test('the IDE shell imports resolve transitively', () async {
+      // ide.js is bundled with acelery/* left external, so its own imports go
+      // through the same map.
+      final shell =
+          await http.get(Uri.parse('$origin/tools/js/acelery/ide.js'));
+      expect(shell.statusCode, 200);
+      for (final name in RegExp(r'"acelery/([^"]+)"')
+          .allMatches(shell.body)
+          .map((m) => m.group(1)!)
+          .toSet()) {
+        expect(
+          (await http.get(Uri.parse('$origin/tools/js/acelery/$name')))
+              .statusCode,
+          200,
+          reason: name,
+        );
       }
     });
 
@@ -83,12 +128,14 @@ void main() {
       }
     });
 
-    test('xscript.js is served and still takes the HTTP bridge path', () async {
+    test('xscript.js is served and takes the HTTP bridge path', () async {
       final js = await http.get(Uri.parse('$origin/tools/js/xscript.js'));
       expect(js.statusCode, 200);
-      // The port depends on this fallback existing; see plan §2.
+      // The port depends on this transport; see plan §2.
       expect(js.body, contains('/android.itf?'));
-      expect(js.body, contains(r'typeof Android != "undefined"'));
+      // And on there being no other one: the in-WebView branch was dead code
+      // from Phase 2 onward and is gone (evaluation §1.4).
+      expect(js.body, isNot(contains('Android')));
     });
 
     test('a path outside the document root is not served', () async {

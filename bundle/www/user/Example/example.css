@@ -1,7 +1,12 @@
-td.x_layout {
-   vertical-align: top;          
-}
+/* The app's own styles. launcher.html links every .css in the app folder.
 
-.acelery_navbar{
-   margin-bottom: 0px;
+   The two rules that used to live here propped up xbLayout's HTML-table
+   layout and the Bootstrap 3 navbar; both are gone, so this file is now the
+   place to put your own. */
+
+/* Keeps a long CSV or JSON dump inside its card rather than widening the page
+   on a phone. */
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
 }

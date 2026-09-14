@@ -1,8 +1,10 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
 /// Guards the Bootstrap 5 migration of bundle/ (plan §4, Phase 3).
@@ -14,6 +16,13 @@ void main() {
   final tools = Directory('bundle/www/tools');
   final pages = [
     'bundle/www/system/index.html',
+    'bundle/www/system/launcher.html',
+    'bundle/www/system/errorlog.html',
+  ].map(File.new).toList();
+
+  /// The pages still built on the 2014 widget layer. system/index.html left
+  /// this list in Phase 4d; launcher.html and errorlog.html have not yet.
+  final legacyPages = [
     'bundle/www/system/launcher.html',
     'bundle/www/system/errorlog.html',
   ].map(File.new).toList();
@@ -74,32 +83,34 @@ void main() {
     test('the new libraries are present', () {
       for (final needed in [
         'js/bootstrap.bundle.min.js',
-        'js/tempus-dominus.min.js',
         'js/xscript_bs5.js',
         'css/bootstrap.min.css',
-        'css/tempus-dominus.min.css',
-        'fontawesome/css/all.min.css',
-        'fontawesome/webfonts/fa-solid-900.woff2',
+        'css/themes/acelery.css',
+        'css/themes/_dark.css',
+        'icons/icons.css',
+        'icons/icons.woff2',
       ]) {
         expect(File('${tools.path}/$needed').existsSync(), isTrue,
             reason: needed);
       }
     });
 
-    test('every page loads the stack xscript_bs5 assumes', () {
-      for (final page in pages) {
+    test('the pages still on xscript_bs5 load the stack it assumes', () {
+      // system/index.html left this list in Phase 4d: the shell is a component
+      // tree now and loads none of it. launcher.html still hosts user apps
+      // written against the old library, and errorlog.html is not rewritten
+      // yet, so both still need it.
+      for (final page in legacyPages) {
         final html = read(page);
         // bootstrap.bundle carries Popper, which Tempus Dominus positions with.
         expect(html, contains('js/bootstrap.bundle.min.js'), reason: page.path);
-        expect(html, contains('js/tempus-dominus.min.js'), reason: page.path);
         expect(html, contains('js/xscript_bs5.js'), reason: page.path);
-        expect(html, contains('fontawesome/css/all.min.css'), reason: page.path);
-        expect(html, contains('css/tempus-dominus.min.css'), reason: page.path);
+        expect(html, contains('icons/icons.css'), reason: page.path);
       }
     });
 
     test('bootstrap loads before the script that uses it', () {
-      for (final page in pages) {
+      for (final page in legacyPages) {
         final html = read(page);
         expect(html.indexOf('js/bootstrap.bundle.min.js'),
             lessThan(html.indexOf('js/xscript_bs5.js')),
@@ -141,6 +152,39 @@ void main() {
       final bs5 = read(File('${tools.path}/js/xscript_bs5.js'));
       final addItem = bs5.substring(bs5.indexOf('xbNavBar.prototype.addItem'));
       expect(addItem.substring(0, 250), contains('this.elements.push'));
+    });
+
+    test('every library property the shipped pages read still exists', () {
+      // The method-level check below was itself not sufficient. The IDE also
+      // reached for `navBar.navA`, a *property* the Bootstrap 3 library
+      // exposed and xscript5 does not, so opening a project threw
+      // "Cannot read properties of undefined (reading 'node')" — the same
+      // class of silent break as addDropdown, one level down.
+      final library = [
+        'js/xscript.js',
+        'js/xscript_bs5.js',
+        'js/xscript_crud.js',
+      ].map((f) => read(File('${tools.path}/$f'))).join('\n');
+
+      final pageSource = [
+        ...pages.map(read),
+        read(File('bundle/www/user/Example/example.js')),
+      ].join('\n');
+
+      // Properties the pages read off a widget, as `something.prop.` or
+      // `something.prop =`. Only the names the library is supposed to own are
+      // interesting, so this is pinned to the set the pages actually use.
+      const widgetProperties = ['node', 'elements', 'navList', 'list', 'id'];
+      for (final property in widgetProperties) {
+        if (!pageSource.contains('.$property')) continue;
+        expect(library, contains('this.$property'),
+            reason: '$property is read by a shipped page but the library '
+                'never assigns it');
+      }
+
+      // And specifically: nothing may reach for the Bootstrap 3 brand link.
+      expect(pageSource, isNot(contains('navA')),
+          reason: 'navA was the Bootstrap 3 brand xLink; use setTitle');
     });
 
     test('every method the shipped pages call still exists', () {
@@ -187,16 +231,35 @@ void main() {
   });
 
   group('the native bridge survived the swap', () {
-    test('xscript.js still falls back to the HTTP interface', () {
-      // The whole port rests on this branch; see plan §2.
+    test('xscript.js talks to the HTTP interface', () {
+      // The whole port rests on this transport; see plan §2.
       final js = read(File('${tools.path}/js/xscript.js'));
       expect(js, contains('/android.itf?'));
-      expect(js, contains('typeof Android != "undefined"'));
+    });
+
+    test('the dead in-WebView branch is gone', () {
+      // The Flutter host deliberately never registers an `Android` channel, so
+      // every `typeof Android != "undefined"` branch has been unreachable since
+      // Phase 2. Keeping them made the bridge dual-mode for no one
+      // (evaluation §1.4).
+      final js = read(File('${tools.path}/js/xscript.js'));
+      expect(js, isNot(contains('Android')));
+    });
+
+    test('the library and the bundle have not drifted', () {
+      // xscript5/ is where the library is maintained; bundle/ is what ships.
+      // Phase 3 shipped a defect because a fix landed in only one of them.
+      for (final f in ['xscript.js', 'xscript_bs5.js', 'xscript_crud.js']) {
+        expect(read(File('${tools.path}/js/$f')),
+            read(File('xscript5/$f')), reason: f);
+      }
     });
   });
 
   group('every theme xbTheme offers resolves', () {
-    test('each listed theme has a stylesheet', () {
+    final themeDir = Directory('${tools.path}/css/themes');
+
+    test('each listed theme has a delta stylesheet', () {
       final lib = read(File('${tools.path}/js/xscript_bs5.js'));
       final block = lib.substring(
           lib.indexOf('function xbTheme'), lib.indexOf('this.currTheme'));
@@ -205,38 +268,719 @@ void main() {
           .map((m) => m.group(1)!)
           .toList();
 
-      expect(values, isNotEmpty);
-      // Paper and Readable were renamed upstream; the directories keep the old
-      // names so existing user apps still resolve.
+      expect(values, hasLength(18));
+      // Paper and Readable were renamed upstream (Materia, Litera); the old
+      // names are what xbTheme offers, so they are what must resolve.
       expect(values, containsAll(['acelery', 'default', 'paper', 'readable']));
 
       for (final theme in values) {
-        expect(
-          File('${tools.path}/css/bootstrap_themes/$theme/bootstrap.min.css')
-              .existsSync(),
-          isTrue,
-          reason: theme,
-        );
+        expect(File('${themeDir.path}/$theme.css').existsSync(), isTrue,
+            reason: theme);
       }
     });
 
-    test('the themes are Bootstrap 5, not Bootstrap 3', () {
-      final dir = Directory('${tools.path}/css/bootstrap_themes');
-      for (final theme in dir.listSync().whereType<Directory>()) {
-        final css = File('${theme.path}/bootstrap.min.css').readAsStringSync();
-        expect(css, contains('--bs-'), reason: theme.path);
-        expect(css, isNot(contains('.glyphicon{')), reason: theme.path);
+    test('a theme is a delta, not another whole Bootstrap', () {
+      // The point of §3.4: 18 × 228 KB became one base plus small overrides.
+      for (final css in themeDir.listSync().whereType<File>()) {
+        expect(css.lengthSync(), lessThan(120 * 1024), reason: css.path);
+        expect(css.readAsStringSync(), isNot(contains('.container-fluid')),
+            reason: '${css.path} redeclares Bootstrap itself');
+      }
+      final total = themeDir
+          .listSync()
+          .whereType<File>()
+          .fold<int>(0, (sum, f) => sum + f.lengthSync());
+      expect(total, lessThan(1024 * 1024),
+          reason: '$total bytes; 18 Bootswatch builds were 4.1 MB');
+    });
+
+    test('scoping a theme rule does not change its specificity', () {
+      // The bug this exists for: prefixing `:root[data-acelery-theme="x"] `
+      // scores (0,2,1) against Bootstrap's `.dropdown-menu.show` at (0,2,0),
+      // so Bootswatch's `.dropdown-menu{display:none}` won and *every dropdown
+      // in the product stopped opening* under any theme — silently, because
+      // the markup and the click handler were both correct. `:where()`
+      // contributes zero specificity, so a scoped rule keeps the score it had
+      // in its own stylesheet and source order does the rest.
+      final united =
+          File('${themeDir.path}/united.css').readAsStringSync();
+      expect(united, contains(':where(:root[data-acelery-theme="united"])'));
+
+      // Specifically: nothing may out-specify `.dropdown-menu.show`.
+      final offenders = RegExp(r'(:root\[data-acelery-theme="[a-z]+"\]) ([^{,]+)\{')
+          .allMatches(united)
+          .map((m) => m.group(0)!)
+          .toList();
+      expect(offenders, isEmpty,
+          reason: 'descendant rules must be scoped with :where()');
+    });
+
+    test('a themed page can still open a dropdown', () {
+      // The end state the rule above protects, asserted directly: for every
+      // theme, the last rule setting `display` on a bare `.dropdown-menu` must
+      // not be able to beat `.dropdown-menu.show`.
+      for (final css in themeDir.listSync().whereType<File>()) {
+        final text = css.readAsStringSync();
+        final bare = RegExp(r'([^{}]*)\.dropdown-menu\{[^}]*display:none')
+            .allMatches(text);
+        for (final match in bare) {
+          expect(match.group(1), contains(':where('),
+              reason: '${css.path} hides .dropdown-menu at a specificity '
+                  'Bootstrap cannot undo');
+        }
       }
     });
 
-    test('the aCelery theme keeps its palette', () {
-      final css = File('${tools.path}/css/bootstrap_themes/acelery/'
-              'bootstrap.min.css')
-          .readAsStringSync();
-      // Carried over from the Bootstrap 3 theme it replaces.
-      expect(css, contains('#283b41')); // navbar
-      expect(css, contains('#586d72')); // primary
-      expect(css, contains('#86a0a4')); // brand text
+    test('every rule in a theme is scoped to that theme', () {
+      // An unscoped rule would leak into every other theme.
+      final darkly = File('${themeDir.path}/darkly.css').readAsStringSync();
+      final body = darkly.substring(darkly.indexOf('*/') + 2);
+      for (final rule in body.split('\n').where((l) => l.contains('{'))) {
+        if (rule.trimLeft().startsWith('@')) continue;
+        expect(rule, contains('data-acelery-theme="darkly"'),
+            reason: rule.substring(0, rule.indexOf('{')));
+      }
+    });
+
+    test('no theme fetches a webfont it cannot reach', () {
+      // Bootswatch themes @import Google Fonts. aCelery is fully offline (C3),
+      // so those are stripped; a leftover is a guaranteed failed request.
+      for (final css in themeDir.listSync().whereType<File>()) {
+        final text = css.readAsStringSync();
+        expect(text, isNot(contains('@font-face')), reason: css.path);
+        expect(text, isNot(contains('@import')), reason: css.path);
+        expect(text, isNot(contains('url(')), reason: css.path);
+      }
+    });
+
+    test('the aCelery theme actually retints its components', () {
+      // The defect this design exists for: Bootstrap 5.3 compiles .btn-primary
+      // to --bs-btn-bg:#0d6efd, a literal, so overriding --bs-primary alone
+      // leaves the Save button stock blue. Verified on device.
+      final css = File('${themeDir.path}/acelery.css').readAsStringSync();
+      expect(css, contains('--bs-primary: #586d72'));
+      expect(css, contains('.btn-primary'));
+      expect(css, contains('--bs-btn-bg: #586d72'));
+    });
+
+    test('switching a theme swaps a delta, not a whole stylesheet', () {
+      // Both the legacy library and acelery/ui.js write the same attribute and
+      // point at the same directory, so they cannot drift apart.
+      final lib = read(File('${tools.path}/js/xscript_bs5.js'));
+      final setTheme = lib.substring(lib.indexOf('xbTheme.prototype.setTheme'));
+      final body = setTheme.substring(0, setTheme.indexOf('\n}'));
+      expect(body, contains('data-acelery-theme'));
+      expect(body, contains('data-bs-theme'));
+      expect(body, contains('/tools/css/themes/'));
+      expect(body, isNot(contains('bootstrap_themes')));
+
+      final ui = File('web/src/ui/theme.js').readAsStringSync();
+      expect(ui, contains('data-acelery-theme'));
+      expect(ui, contains('data-bs-theme'));
+      expect(ui, contains('/tools/css/themes/'));
+
+      // And they must reuse the <link> the page ships rather than adding a
+      // second one — two attached theme stylesheets means the one being
+      // switched away from keeps applying.
+      expect(ui, contains('"xbtheme"'));
+      expect(body, contains('"xbtheme"'));
+      for (final page in pages) {
+        expect(read(page), contains('id="xbtheme"'), reason: page.path);
+      }
+    });
+
+    test('every page carries a theme before first paint', () {
+      // Without it the page paints stock Bootstrap and then repaints themed.
+      for (final page in pages) {
+        final html = read(page);
+        expect(html, contains('data-acelery-theme='), reason: page.path);
+        expect(html, contains('id="xbtheme"'), reason: page.path);
+      }
+    });
+  });
+
+  group('Phase 4a — the pages leave quirks mode', () {
+    test('every page declares a doctype and a charset', () {
+      // Without one the page renders in quirks mode, where Bootstrap 5's
+      // percentage heights and table-cell inheritance behave differently.
+      for (final page in [...pages, File('bundle/www/index.html')]) {
+        final html = read(page);
+        expect(html.trimLeft(), startsWith('<!DOCTYPE html>'),
+            reason: page.path);
+        expect(html, contains('<meta charset="utf-8">'), reason: page.path);
+      }
+    });
+
+    test('no page blocks pinch-zoom', () {
+      // user-scalable=no is an accessibility failure and buys nothing on a
+      // modern WebView (evaluation §7.2).
+      for (final page in pages) {
+        final html = read(page);
+        expect(html, isNot(contains('user-scalable')), reason: page.path);
+        expect(html, isNot(contains('maximum-scale')), reason: page.path);
+        expect(html, contains('width=device-width'), reason: page.path);
+      }
+    });
+  });
+
+  group('Phase 4a — the vendored trees stay pruned', () {
+    // A vendor refresh that re-extracts an upstream archive would silently put
+    // ~2 MB back. These pin what was removed and why.
+
+    test('CodeMirror 4 is gone entirely', () {
+      // Phase 4a cut it from 2.6 MB to 592 KB by deleting the 78 unreferenced
+      // modes, 51 addons, 228 KB of keymaps and 89 demo pages. Phase 4d
+      // replaces what was left (§3.7), so the whole vendored tree goes — and
+      // with it the last classic <script> tags in the IDE.
+      expect(Directory('${tools.path}/codemirror').existsSync(), isFalse);
+      for (final page in pages) {
+        expect(read(page), isNot(contains('tools/codemirror')),
+            reason: page.path);
+      }
+    });
+
+    test('the top-level bootstrap.min.css is the base, not a duplicate', () {
+      // It was dead weight in Phase 4a — 228 KB referenced by nothing, because
+      // every page linked a theme build instead. Phase 4c inverts that: the
+      // pages link stock Bootstrap once and themes.css layers custom properties
+      // over it (§3.4), so exactly one full Bootstrap ships.
+      final css = File('${tools.path}/css/bootstrap.min.css');
+      expect(css.existsSync(), isTrue);
+      expect(Directory('${tools.path}/css/bootstrap_themes').existsSync(),
+          isFalse,
+          reason: '18 × 228 KB of theme builds replaced by themes.css');
+
+      // "A full Bootstrap" means the framework's own variable block, which
+      // the complete build emits exactly once — not merely a file that names a
+      // Bootstrap class, which any of our own stylesheets may do.
+      final fullBootstraps = Directory('${tools.path}/css')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.css'))
+          .where((f) =>
+              f.readAsStringSync().contains(':root,[data-bs-theme=light]'))
+          .length;
+      expect(fullBootstraps, 1, reason: 'more than one full Bootstrap shipped');
+    });
+
+  });
+
+  group('Phase 4b — the async bridge', () {
+    final modules = Directory('bundle/www/tools/js/acelery');
+
+    test('the built modules are shipped', () {
+      // web/ is the source; tool/build_js.sh writes these, and they are
+      // committed so a checkout without node still packs a working bundle.
+      for (final m in [
+        'bridge.js',
+        'sql.js',
+        'file.js',
+        'http.js',
+        'export.js',
+        'index.js',
+      ]) {
+        expect(File('${modules.path}/$m').existsSync(), isTrue, reason: m);
+      }
+    });
+
+    test('the built output matches web/src', () {
+      // A stale build ships yesterday's bridge. tool/build_js.sh stamps the
+      // output with a hash of its inputs, so this catches a source edit that
+      // was never built without needing node to rebuild and diff.
+      final stamp = File('${modules.path}/.sources.sha256');
+      expect(stamp.existsSync(), isTrue,
+          reason: 'no build stamp; run tool/build_js.sh');
+
+      // Same order tool/build_js.sh cats them in: acelery/ then ui/, each
+      // glob-sorted.
+      final sources = [
+        for (final dir in [
+        'web/src/acelery',
+        'web/src/ui',
+        'web/src/editor',
+        'web/src/ide',
+      ])
+          ...(Directory(dir)
+              .listSync()
+              .whereType<File>()
+              .where((f) => f.path.endsWith('.js'))
+              .toList()
+            ..sort((a, b) => a.path.compareTo(b.path))),
+      ];
+
+      final digest = sha256
+          .convert(sources.expand((f) => f.readAsBytesSync()).toList())
+          .toString();
+
+      expect(digest, stamp.readAsStringSync().trim(),
+          reason: 'bundle/www/tools/js/acelery is stale; run tool/build_js.sh');
+    });
+
+    test('every route the modules call is one the host implements', () {
+      // The check Phase 3 needed and did not have: a name mismatch across this
+      // seam is silent until an app runs. bridge_test.dart pins the Dart side;
+      // this pins that the JS side asks for the same things.
+      final js = [
+        'sql.js',
+        'file.js',
+        'http.js',
+        'export.js',
+      ].map((m) => File('web/src/acelery/$m').readAsStringSync()).join('\n');
+
+      final handler =
+          File('lib/src/server/itf_handler.dart').readAsStringSync();
+      // The handler dispatches two ways: `case 'x':` in statement switches and
+      // `'x' => ...` in expression ones.
+      final implemented = {
+        ...RegExp(r"case '([a-z0-9]+)':")
+            .allMatches(handler)
+            .map((m) => m.group(1)!),
+        ...RegExp(r"'([a-z0-9]+)' =>")
+            .allMatches(handler)
+            .map((m) => m.group(1)!),
+      };
+
+      // Only the bridge calls: every one carries an `opt`. export.js also
+      // posts `{action: ...}` payloads to the host channel, which is a
+      // different protocol and is pinned by host_bridge_test.dart.
+      final requested = RegExp(r'opt:\s*"[a-z]+",\s*action:\s*"([a-z0-9]+)"')
+          .allMatches(js)
+          .map((m) => m.group(1)!)
+          .toSet();
+
+      expect(requested, isNotEmpty);
+      for (final action in requested) {
+        expect(implemented, contains(action),
+            reason: '$action is requested by web/src/acelery but '
+                '/android.itf does not implement it');
+      }
+    });
+
+    test('nothing in the new modules builds SQL by concatenation', () {
+      // §3.3: bound parameters are the only shape offered, so that an app —
+      // or a model writing one — cannot reach for the other.
+      final sql = File('web/src/acelery/sql.js').readAsStringSync();
+      expect(sql, isNot(contains('btoa')));
+      for (final method in ['select(sql', 'exec(sql', 'insert(sql']) {
+        expect(sql, contains('$method, args'), reason: method);
+      }
+    });
+
+    test('the modules use fetch, not synchronous XHR', () {
+      // The reason the UI froze on every database call. Evaluation §1.2.
+      for (final m in ['bridge.js', 'sql.js', 'file.js', 'http.js']) {
+        final source = File('web/src/acelery/$m').readAsStringSync();
+        expect(source, isNot(contains('XMLHttpRequest')), reason: m);
+      }
+      expect(File('web/src/acelery/bridge.js').readAsStringSync(),
+          contains('await fetch('));
+    });
+  });
+
+  group('Phase 4c — the widget layer', () {
+    final ui = File('bundle/www/tools/js/acelery/ui.js');
+
+    test('the bundled widget layer ships', () {
+      expect(ui.existsSync(), isTrue, reason: 'run tool/build_js.sh');
+    });
+
+    test('exactly one copy of preact core is bundled', () {
+      // react-bootstrap resolves through preact/compat while htm/preact
+      // resolves preact directly. On esbuild's browser platform both land on
+      // preact.module.js; under --platform=node two copies come in, the hooks
+      // module registers its options on the instance that is not rendering, and
+      // the first render dies inside useBootstrapPrefix with a stack that points
+      // nowhere near the cause. Minified output cannot be grepped for this, so
+      // tool/build_js.sh reads esbuild's metafile, fails the build at anything
+      // but one, and records the count here.
+      final info = File('bundle/www/tools/js/acelery/.build-info.json');
+      expect(info.existsSync(), isTrue, reason: 'run tool/build_js.sh');
+
+      final decoded =
+          jsonDecode(info.readAsStringSync()) as Map<String, Object?>;
+      expect(decoded['preactCores'], 1);
+
+      // And the dependency set is the one §3.1a measured. A new name here means
+      // the byte budget below was measured against something else.
+      expect(decoded['packages'], contains('react-bootstrap'));
+      expect(decoded['packages'], contains('preact'));
+      expect(decoded['packages'], contains('htm'));
+      expect((decoded['packages']! as List), isNot(contains('react')),
+          reason: 'react itself must never be bundled; preact/compat stands in');
+    });
+
+    test('the widget layer renders to light DOM', () {
+      // The whole reason Lit was declined (§3.1): a global stylesheet does not
+      // pierce a shadow root, so Bootstrap's CSS would not reach the
+      // components. Nothing here may attach one.
+      final source = ui.readAsStringSync();
+      expect(source, isNot(contains('attachShadow')));
+      expect(source, isNot(contains('adoptedStyleSheets')));
+    });
+
+    test('the widget layer stays within its byte budget', () {
+      // §3.1a measured 127 KB raw / 45 KB gzipped for this stack. A jump means
+      // a dependency crept in; §5's weight table assumes it does not.
+      expect(ui.lengthSync(), lessThan(200 * 1024),
+          reason: '${ui.lengthSync()} bytes — §3.1a measured ~127 KB');
+    });
+
+    test('no sourcemap ships for the vendored bundle', () {
+      // ~700 KB of map for library internals nobody debugs into, on a bundle
+      // being shrunk to ~1.2 MB. The capability modules keep theirs.
+      expect(File('${ui.path}.map').existsSync(), isFalse);
+      expect(File('bundle/www/tools/js/acelery/sql.js.map').existsSync(), isTrue);
+    });
+
+    test('every theme xbTheme offered is still offered', () {
+      // Decision §9.6: all 18 survive, resolving through CSS variables.
+      final theme = File('web/src/ui/theme.js').readAsStringSync();
+      final listed = RegExp(r'"([a-z]+)"')
+          .allMatches(theme.substring(theme.indexOf('export const THEMES'),
+              theme.indexOf('/** Which of them')))
+          .map((m) => m.group(1)!)
+          .toSet();
+
+      final old = read(File('${tools.path}/js/xscript_bs5.js'));
+      final block = old.substring(
+          old.indexOf('function xbTheme'), old.indexOf('this.currTheme'));
+      final offered = RegExp(r'value:\s*"([a-z]+)"')
+          .allMatches(block)
+          .map((m) => m.group(1)!)
+          .toSet();
+
+      expect(offered, isNotEmpty);
+      expect(listed, containsAll(offered),
+          reason: 'a theme xbTheme offers is missing from THEMES');
+    });
+  });
+
+  group('Phase 4c — ES modules for user apps', () {
+    final launcher = File('bundle/www/system/launcher.html');
+
+    test('the launcher declares the import map apps rely on', () {
+      // Without it `import { openDB } from "acelery/sql.js"` is a bare
+      // specifier the browser refuses, and every app fails identically.
+      final html = launcher.readAsStringSync();
+      expect(html, contains('type="importmap"'));
+      expect(html, contains('"acelery/"'));
+      expect(html, contains('/tools/js/acelery/'));
+    });
+
+    test('the import map resolves to files that exist', () {
+      final html = launcher.readAsStringSync();
+      final prefix = RegExp(r'"acelery/"\s*:\s*"([^"]+)"').firstMatch(html);
+      expect(prefix, isNotNull);
+      final dir = Directory('bundle/www${prefix!.group(1)}');
+      expect(dir.existsSync(), isTrue, reason: dir.path);
+      for (final m in ['sql.js', 'file.js', 'http.js', 'export.js', 'ui.js']) {
+        expect(File('${dir.path}$m').existsSync(), isTrue, reason: m);
+      }
+    });
+
+    test('the launcher runs one entry module, not every loose file', () {
+      final html = launcher.readAsStringSync();
+      expect(html, contains('type="module"'));
+      expect(html, contains('await import('));
+      expect(html, contains('module.default'));
+      // The old contract: LazyLoad every .js in directory order, call a global.
+      expect(html, isNot(contains('LazyLoad.js')));
+    });
+
+    test('lazyload.js is gone and nothing still calls it', () {
+      expect(File('${tools.path}/js/lazyload.js').existsSync(), isFalse);
+      for (final page in pages) {
+        expect(read(page), isNot(contains('LazyLoad.')), reason: page.path);
+        expect(read(page), isNot(contains('js/lazyload.js')),
+            reason: page.path);
+      }
+    });
+
+    test('a failed app load is reported, not swallowed', () {
+      // The old launcher's failure mode was a blank page and a silent console.
+      final html = launcher.readAsStringSync();
+      expect(html, contains('alert-danger'));
+      expect(html, contains('e.stack'));
+    });
+
+    test('the manifest names an entry point, and the IDE writes one', () {
+      final manifest =
+          File('bundle/www/user/Example/acelery_app.json').readAsStringSync();
+      final decoded = jsonDecode(manifest) as Map<String, Object?>;
+      expect(decoded['entry'], 'example.js');
+
+      final ide = File('web/src/ide/ide_screen.js').readAsStringSync();
+      expect(ide, contains('entry: "main.js"'),
+          reason: 'new projects must get an entry field');
+      expect(ide, contains('export default function main'),
+          reason: 'new projects must get a runnable entry module');
+    });
+
+    test('the Example app exports its entry point', () {
+      // launcher.html imports it as a module; a global main() would not be
+      // reachable from one.
+      final js = File('bundle/www/user/Example/example.js').readAsStringSync();
+      expect(js, contains('export default function main'));
+    });
+
+    test('the shipped entry module is what the manifest names', () {
+      final decoded = jsonDecode(
+              File('bundle/www/user/Example/acelery_app.json').readAsStringSync())
+          as Map<String, Object?>;
+      expect(File('bundle/www/user/Example/${decoded['entry']}').existsSync(),
+          isTrue);
+    });
+  });
+
+  group('Phase 4d — CodeMirror 6', () {
+    final editor = File('bundle/www/tools/js/acelery/editor.js');
+
+    test('the editor bundle ships', () {
+      expect(editor.existsSync(), isTrue, reason: 'run tool/build_js.sh');
+    });
+
+    test('only the IDE loads it', () {
+      // launcher.html and errorlog.html never edit code, so they must not pay
+      // for an editor — which is why it is its own bundle, not part of ui.js.
+      expect(read(pages.first), contains('acelery/editor.js'));
+      expect(read(pages.first), contains('acelery/ide.js'));
+      for (final page in pages.sublist(1)) {
+        expect(read(page), isNot(contains('editor.js')), reason: page.path);
+      }
+    });
+
+    test('the widget layer does not drag the editor in', () {
+      final ui = File('bundle/www/tools/js/acelery/ui.js').readAsStringSync();
+      expect(ui, isNot(contains('@codemirror')));
+      expect(ui, isNot(contains('cm-scroller')));
+    });
+
+    test('it carries only the languages an app is written in', () {
+      // The IDE's New File dialog offers .js and .css; CM4 shipped php and
+      // clike because its mode directory shipped all 84. Their Lezer grammars
+      // are 133 KB, so they are not carried (§3.7).
+      final source = File('web/src/editor/index.js').readAsStringSync();
+      for (final wanted in ['lang-javascript', 'lang-css', 'lang-html', 'lang-xml']) {
+        expect(source, contains(wanted), reason: wanted);
+      }
+      // "lang-java" is a substring of "lang-javascript", so match the import.
+      for (final dropped in ['lang-php"', 'lang-java"']) {
+        expect(source, isNot(contains(dropped)), reason: dropped);
+      }
+    });
+
+    test('the editor stays within its byte budget', () {
+      // §3.7 projected 400-500 KB raw for a tree-shaken CM6. Four languages
+      // rather than six lands at ~566 KB — roughly byte-neutral against the
+      // already-pruned CM4 it replaces, while adding search, autocomplete,
+      // folding, bracket matching and undo history, none of which CM4 shipped
+      // in a working state.
+      expect(editor.lengthSync(), lessThan(650 * 1024),
+          reason: '${editor.lengthSync()} bytes');
+    });
+
+    test('the IDE drives the editor through the small API it always used', () {
+      // CM4 gave the IDE five things. Keeping the same five is what lets the
+      // editor migration and the IDE rewrite stay separate pieces of work.
+      final ide = File('web/src/ide/ide_screen.js').readAsStringSync();
+      for (final call in [
+        'createEditor(',
+        '.getValue()',
+        '.setTheme(',
+        'onChange:',
+        '.destroy()',
+      ]) {
+        expect(ide, contains(call), reason: call);
+      }
+      expect(ide, isNot(contains('new CodeMirror')));
+      expect(ide, isNot(contains('setOption')));
+    });
+
+    test('the editor theme follows the app theme unless overridden', () {
+      // CM6 themes are extensions, not the 30 stylesheets CM4 shipped, so the
+      // list is Light / Dark / follow (§9.9). Following is the default because
+      // a light editor inside Darkly is the wrong answer.
+      final shell = File('web/src/ide/index.js').readAsStringSync();
+      expect(shell, contains('Follow app theme'));
+      // "" means follow, resolved through the app theme's light/dark mode.
+      expect(shell, contains('isDark()'));
+
+      final source = File('web/src/editor/index.js').readAsStringSync();
+      expect(source, contains('oneDark'));
+    });
+
+    test('Tab indents rather than moving focus', () {
+      // On a phone there is nowhere for focus to go, and an editor that cannot
+      // indent is not an editor.
+      expect(File('web/src/editor/index.js').readAsStringSync(),
+          contains('indentWithTab'));
+    });
+  });
+
+  group('Phase 4e — what was added and what left', () {
+    final acelery = Directory('bundle/www/tools/js/acelery');
+
+    test('Tempus Dominus is gone and the pickers use the platform', () {
+      // 136 KB of JavaScript and CSS for three widgets, plus a dependency on
+      // Popper and on Font Awesome's chevrons. Both target runtimes render the
+      // OS picker for <input type=date> (§3.9).
+      expect(File('${tools.path}/js/tempus-dominus.min.js').existsSync(), isFalse);
+      expect(File('${tools.path}/css/tempus-dominus.min.css').existsSync(), isFalse);
+      for (final page in pages) {
+        expect(read(page), isNot(contains('tempus')), reason: page.path);
+      }
+
+      final lib = read(File('${tools.path}/js/xscript_bs5.js'));
+      expect(lib, isNot(contains('TempusDominus')));
+      expect(lib, isNot(contains('tempusDominus')));
+      // And the three pickers still exist, on native inputs.
+      for (final picker in [
+        'function xbDateTimePicker',
+        'function xbDatePicker',
+        'function xbTimePicker',
+      ]) {
+        expect(lib, contains(picker), reason: picker);
+      }
+      expect(lib, contains('this.inputType = "date"'));
+      expect(lib, contains('this.inputType = "time"'));
+    });
+
+    test('the pickers keep the API an app was written against', () {
+      // setDisabledDates has no native equivalent, so it stays as a no-op that
+      // says so — an app that calls it gets an unrestricted picker rather than
+      // a thrown error.
+      final lib = read(File('${tools.path}/js/xscript_bs5.js'));
+      for (final method in [
+        'xbDateTimePicker.prototype.setMinDate',
+        'xbDateTimePicker.prototype.setMaxDate',
+        'xbDateTimePicker.prototype.setDisabledDates',
+        'xbDateTimePicker.prototype.getValue',
+        'xbDateTimePicker.prototype.setValue',
+        'xbDateTimePicker.prototype.run',
+        'xbDateTimePicker.prototype.destroy',
+      ]) {
+        expect(lib, contains(method), reason: method);
+      }
+    });
+
+    test('Font Awesome is subset to the glyphs actually drawn', () {
+      // 372 KB of stylesheet and three webfonts, two of which nothing
+      // referenced, for nine icons (§5).
+      expect(Directory('${tools.path}/fontawesome').existsSync(), isFalse);
+
+      final css = File('${tools.path}/icons/icons.css');
+      final font = File('${tools.path}/icons/icons.woff2');
+      expect(css.existsSync(), isTrue, reason: 'run tool/build_icons.mjs');
+      expect(font.lengthSync(), lessThan(16 * 1024),
+          reason: '${font.lengthSync()} bytes — a subset, not a family');
+    });
+
+    test('every icon the source names is in the subset', () {
+      // An icon outside the subset renders as nothing at all, so this is the
+      // check that keeps that from shipping.
+      final css = File('${tools.path}/icons/icons.css').readAsStringSync();
+      final named = <String>{};
+      for (final dir in ['bundle/www/system', 'bundle/www/user', 'web/src']) {
+        for (final file in Directory(dir)
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((f) => const ['.js', '.html', '.css']
+                .contains(f.path.substring(f.path.lastIndexOf('.'))))) {
+          for (final m
+              in RegExp(r'fa-([a-z0-9-]+)').allMatches(file.readAsStringSync())) {
+            final name = m.group(1)!;
+            if (['solid', 'regular', 'brands'].contains(name)) continue;
+            named.add(name);
+          }
+        }
+      }
+      expect(named, isNotEmpty);
+      for (final icon in named) {
+        expect(css, contains('.fa-$icon '), reason: icon);
+      }
+    });
+
+    test('charts ship separately from the widget layer', () {
+      // Chart.js is 68 KB gzipped and most apps never draw one (§3.8).
+      expect(File('${acelery.path}/chart.js').existsSync(), isTrue);
+      final ui = File('${acelery.path}/ui.js').readAsStringSync();
+      expect(ui, isNot(contains('chart.js')));
+      expect(ui, isNot(contains('Chart.js')));
+    });
+
+    test('only one bundle embeds preact', () {
+      // Two copies means the hooks in one file register on a different
+      // instance than the one rendering (§3.1a). chart.js imports preact
+      // through the bare specifier "acelery/ui.js", so the import map resolves
+      // one copy at runtime — and dropping --external makes the build fail
+      // outright rather than quietly embed a second.
+      final chart = File('${acelery.path}/chart.js').readAsStringSync();
+      expect(chart, contains('acelery/ui.js'),
+          reason: 'chart.js must import preact through ui.js');
+
+      final info = jsonDecode(
+        File('${acelery.path}/.build-info.json').readAsStringSync(),
+      ) as Map<String, Object?>;
+      expect(info['preactCores'], 1);
+    });
+
+    test('the chart bundle stays within the budget §3.8 measured', () {
+      final chart = File('${acelery.path}/chart.js');
+      expect(chart.lengthSync(), lessThan(260 * 1024),
+          reason: '${chart.lengthSync()} bytes — §3.8 measured ~203 KB raw');
+    });
+  });
+
+  group('the collapsed navbar overlays rather than pushing the page', () {
+    final css = File('${tools.path}/css/acelery.css');
+
+    test('every page loads the product stylesheet', () {
+      // Including launcher.html, so a user app's navbar behaves like the
+      // system shell's.
+      expect(css.existsSync(), isTrue);
+      for (final page in pages) {
+        expect(read(page), contains('/tools/css/acelery.css'),
+            reason: page.path);
+      }
+    });
+
+    test('the collapsed menu is positioned out of the flow', () {
+      // Bootstrap's collapsed navbar is a block in normal flow, so opening it
+      // pushes everything below down the page — on a phone, far enough that
+      // what you were looking at leaves the screen, and back again on close.
+      final text = css.readAsStringSync();
+      expect(text, contains('position: absolute'));
+      expect(text, contains('width: max-content'),
+          reason: 'a menu of short labels should not stretch to the viewport');
+      expect(text, contains('overflow-y: auto'),
+          reason: 'a long menu must scroll rather than run off the screen');
+    });
+
+    test('it only applies below the expand breakpoint', () {
+      // Above it the navbar expands as Bootstrap intends and none of this
+      // should be in play.
+      final text = css.readAsStringSync();
+      final media = RegExp(r'@media \(max-width: 991\.98px\)').firstMatch(text);
+      expect(media, isNotNull,
+          reason: 'the overlay rules must be inside the navbar-expand-lg '
+              'breakpoint');
+      expect(text.indexOf('position: absolute'), greaterThan(media!.start));
+    });
+
+    test('both navbars can be dismissed without choosing anything', () {
+      // An inline menu left open is in the way; an overlaid one hides what is
+      // under it, so tapping outside has to close it.
+      for (final source in [
+        'web/src/ide/chrome.js',
+        'bundle/www/user/Example/example.js',
+      ]) {
+        expect(File(source).readAsStringSync(), contains('useDismiss'),
+            reason: source);
+      }
+      final dismiss = File('web/src/ui/dismiss.js').readAsStringSync();
+      expect(dismiss, contains('pointerdown'));
+      expect(dismiss, contains('Escape'),
+          reason: 'aCelery also runs in a desktop browser over the LAN');
     });
   });
 
@@ -253,6 +997,19 @@ void main() {
       expect(listing, contains('aCelery/www/tools/js/bootstrap.bundle.min.js'));
       expect(listing, isNot(contains('jquery.min.js')));
       expect(listing, isNot(contains('xscript_bootstrap.js')));
+      expect(listing, isNot(contains('js/lazyload.js')));
+      // Phase 4a's pruning has to reach the device, not just the source tree.
+      expect(listing, isNot(contains('tools/codemirror/')));
+      expect(listing, isNot(contains('tempus-dominus')));
+      expect(listing, isNot(contains('tools/fontawesome/')));
+      expect(listing, contains('aCelery/www/tools/icons/icons.woff2'));
+      expect(listing, contains('aCelery/www/tools/js/acelery/editor.js'));
+      // Phase 4c reinstated tools/css/bootstrap.min.css as the single base
+      // stylesheet; what must not come back is the 18-theme directory.
+      expect(listing, isNot(contains('tools/css/bootstrap_themes/')));
+      expect(listing, contains('aCelery/www/tools/css/themes/acelery.css'));
+      expect(listing, contains('aCelery/www/tools/js/acelery/sql.js'));
+      expect(listing, contains('aCelery/www/tools/js/acelery/ui.js'));
     });
   });
 }

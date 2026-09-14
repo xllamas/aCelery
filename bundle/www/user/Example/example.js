@@ -1,159 +1,374 @@
-var db, topLayout, myModal;
+/*  Copyright 2014: Xavier Llamas Rolland                      */
+/*                                                             */
+/*  This software distributed under the GPLv3 License          */
+/*                                                             */
+////////////////////////////////////////////////////////////////
 
-function initDB(){
-   db = new xSQL();
-   db.openDB("xtest.db");
-   db.sqlExec("create table if not exists person (mname string, email string, grp string)");
-   db.sqlExec("create table if not exists person_tel (person integer, tel string, type string)");
+/**
+ * The aCelery example app — and the reference documentation for authors.
+ *
+ * Everything an app needs comes from two bare-name imports, which the import
+ * map in launcher.html resolves. There is no build step: htm compiles its
+ * templates at runtime, so this file is what runs.
+ *
+ * Read it top to bottom for how an app is put together:
+ *
+ *   - `main` is the default export; launcher.html imports this module and
+ *     calls it. acelery_app.json names the file.
+ *   - the database is opened once and awaited; every call returns a promise
+ *     and the UI does not freeze while one is in flight.
+ *   - the UI is a component tree rendered into <body>. Navigating means
+ *     changing state, not demolishing and rebuilding the page.
+ */
 
+import { openDB } from "acelery/sql.js";
+import { saveFile, closeApp } from "acelery/export.js";
+/* Charts are a separate import because Chart.js is 68 KB gzipped and most apps
+   never draw one — an app pays for it only by asking. */
+import { Chart, fromRows } from "acelery/chart.js";
+import {
+  html, render, useState, useEffect, useRef, useDismiss,
+  Navbar, Nav, NavDropdown, Container,
+  Alert, Button, ButtonGroup, ListGroup, Modal, Tab, Tabs,
+  Row, Col, Panel,
+  Form, Input, Select, TextArea, CheckBox,
+  TableMaint, ThemeSelect,
+  notEmpty, email,
+} from "acelery/ui.js";
+
+/* ------------------------------------------------------------------ schema */
+
+const GROUPS = [
+  { label: "Family", value: "family" },
+  { label: "Friends", value: "friends" },
+  { label: "Work", value: "work" },
+];
+
+/** The fields the Directory maintains, as TableMaint understands them. */
+const PERSON_FIELDS = [
+  { type: "string", title: "Name", name: "mname", validate: [notEmpty()] },
+  { type: "email", title: "Email", name: "email", validate: [email()] },
+  { type: "list", title: "Group", name: "grp", options: GROUPS },
+];
+
+/** A child table: one person has many phone numbers. */
+const PHONE_FIELDS = [
+  { type: "number", title: "Person", name: "person", inList: false },
+  { type: "tel", title: "Number", name: "tel", validate: [notEmpty()] },
+  {
+    type: "list", title: "Type", name: "type",
+    options: ["mobile", "home", "work"],
+  },
+];
+
+async function openDatabase() {
+  const db = await openDB("xtest.db");
+  await db.exec(
+    "create table if not exists person (mname text, email text, grp text)",
+  );
+  await db.exec(
+    "create table if not exists person_tel (person integer, tel text, type text)",
+  );
+  return db;
 }
 
-function tabsTest(){
-   var myTabs = new xbTabs();
-   var pane1 = new xbTabPane();
-   var pane2 = new xbTabPane();
-   var pane3 = new xbTabPane();
-   
-   myTabs.addPane("Pane 1", pane1)
-         .addPane("Pane 2", pane2)
-         .addPane("Pane 3", pane3)
-         .activatePane(1);
-         
-   pane1.addElement(new xbPara("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin et erat et metus auctor cursus. Ut congue facilisis velit sit amet dapibus"));
-   pane2.addElement(new xbPara("Nam pellentesque porta odio, eu auctor felis viverra eget. Aenean tortor ligula, ornare quis tristique in, fermentum nec elit. Lorem ipsum dolor sit amet"));
-   pane3.addElement(new xbPara("Nullam et orci consequat, feugiat nisi in, consectetur mauris. Aenean nec imperdiet augue. Etiam placerat neque lectus, vel volutpat justo dapibus sed"));
-   if (e = topLayout.getElement(1,0))
-      e.remove();
-   topLayout.addElement(myTabs,1,0);
+/* -------------------------------------------------------------- the screens */
+
+/** Directory, on its own: list, record, edit, search. */
+const Directory = ({ db }) => html`
+  <${TableMaint} db=${db} title="Directory" table="person"
+                 fields=${PERSON_FIELDS} />`;
+
+/**
+ * The same directory with its phone numbers attached. `linked` renders a child
+ * TableMaint inside each record, filtered to that record and filling in the
+ * link column on save.
+ */
+const LinkedDirectory = ({ db }) => html`
+  <${TableMaint} db=${db} title="Directory" table="person"
+                 fields=${PERSON_FIELDS}
+                 linked=${[
+                   { title: "Phone numbers", table: "person_tel",
+                     on: "person", fields: PHONE_FIELDS },
+                 ]} />`;
+
+/** Tabs. */
+const TabsDemo = () => html`
+  <${Panel} title="Tabs">
+    <${Tabs} defaultActiveKey="two" className="mb-3">
+      <${Tab} eventKey="one" title="Pane 1">
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+      <//>
+      <${Tab} eventKey="two" title="Pane 2">
+        <p>Nam pellentesque, sem non consectetur cursus, ipsum nulla.</p>
+      <//>
+      <${Tab} eventKey="three" title="Pane 3">
+        <p>Nullam lacinia, lorem non pretium tincidunt, arcu leo.</p>
+      <//>
+    <//>
+  <//>`;
+
+/**
+ * The widgets, and the thing xScript never had: a responsive layout.
+ *
+ * `<Row>`/`<Col span>` sits on Bootstrap's grid, so these two columns are side
+ * by side on a tablet and stacked on a phone. The old `xbLayout` built an HTML
+ * table of percentage-width cells, which did neither.
+ */
+function WidgetsDemo() {
+  const [saved, setSaved] = useState(null);
+
+  return html`
+    <${Panel} title="Widgets">
+      <${Row}>
+        <${Col} span=${6}>
+          <${Form} initial=${{ name: "", grp: "friends", notes: "", active: true }}
+                   onSubmit=${setSaved}>
+            <${Input} label="Name" name="name" validate=${[notEmpty()]} />
+            <${Select} label="Group" name="grp" options=${GROUPS} />
+            <${TextArea} label="Notes" name="notes" rows=${3} />
+            <${CheckBox} label="Active" name="active" />
+            <${Button} type="submit" variant="primary">Save<//>
+          <//>
+        <//>
+        <${Col} span=${6}>
+          <${ThemeSelect} />
+          ${saved
+            ? html`<${Alert} variant="success">
+                <pre class="mb-0">${JSON.stringify(saved, null, 2)}</pre>
+              <//>`
+            : html`<p class="text-muted">
+                Fill the form in and press Save: the values come back as one
+                object, already validated.
+              </p>`}
+        <//>
+      <//>
+    <//>`;
 }
 
-function widgetTest(){
-   var panel = new xbTitlePanel("Widgets");
-   
-   var btnGroup = new xbButtonGroup()
-                      .addElement(new xbButton("Button","btn-primary"))
-                      .addElement(new xbButtonIcon("Icon","fa-solid fa-asterisk"))
-                      .addElement(new xbButtonDropdown("Dropdown")
-                                      .addItem(new xbButtonDropdownItem("Item 1",null))
-                                      .addItem(new xbButtonDropdownItem("Item 2",null))
-                                      .addItem(new xbButtonDropdownItem("Item 3",null)));
-   panel.addElement(new xbImage("/user/Example/Redtwitter_icon_48x48.png","Red Twitter"))
-        .addElement(new xbTheme("Select Theme"))
-        .addElement(new xbStringInput("Input","inp"))
-        .addElement(new xbSelect("Select","sel")
-                        .addOption("Option 1","1")
-                        .addOption("Option 2","2")
-                        .addOption("Option 3","3"))
-        .addElement(btnGroup);                
-                        
-   if (e = topLayout.getElement(1,0))
-      e.remove();
-   topLayout.addElement(panel,1,0);
+/** A modal, and a list built from data. */
+function ModalDemo() {
+  const [open, setOpen] = useState(false);
+  return html`
+    <${Panel} title="Modal">
+      <${Button} variant="primary" onClick=${() => setOpen(true)}>Open<//>
+      <${Modal} show=${open} onHide=${() => setOpen(false)} centered>
+        <${Modal.Header} closeButton>
+          <${Modal.Title}>aCelery Modal<//>
+        <//>
+        <${Modal.Body}>
+          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin et erat
+          et metus auctor cursus.
+        <//>
+        <${Modal.Footer}>
+          <${Button} variant="primary" onClick=${() => setOpen(false)}>Close<//>
+        <//>
+      <//>
+    <//>`;
 }
 
-function jsonNews(){
-   var jsonfeed = new xHTTP().get("http://ajax.googleapis.com/ajax/services/feed/load?v=1.0&num=8&q=http%3A%2F%2Fnews.google.com%2Fnews%3Foutput%3Drss");
-   var list = new xbListGroup();
-   var data = JSON.parse(jsonfeed);
-   for (var i = 0; ((i < data.responseData.feed.entries.length) && (i < 10)); i++){
-      var ent = data.responseData.feed.entries[i];
-      var item = new xbListGroupItem()
-                     .addElement(new xMultiHtml("h3")
-                                    .addElement(new xbPara(ent.title,"text-info")))
-              .addElement(new xPara(ent.contentSnippet));
-      list.addElement(item);
-   }
-   if (e = topLayout.getElement(1,0))
-      e.remove();
-   topLayout.addElement(list,1,0);
-}
+/** Exporting: build a file, hand it to the device's share sheet. */
+function ExportDemo({ db }) {
+  const [status, setStatus] = useState(null);
 
-function dirExport(){
-   var resObj;
-   var data = "";
-   var myEf = new xExportFile();
-   
-   db.sqlSelect("select a.rowid, a.*, b.rowid, b.* from person as a, person_tel as b where b.person = a.rowid order by a.mname");
-   while (resObj = db.getNextRow()){
-      var first = true;
-      for(fld in resObj){
-         if (!first)
-            data += ',';
-         first = false;
-         data += '"' + resObj[fld] + '"';
+  async function exportCsv() {
+    try {
+      const rows = await db.select(
+        "select p.mname, p.email, p.grp, t.tel, t.type" +
+          " from person p left join person_tel t on t.person = p.rowid" +
+          " order by p.mname",
+      );
+      if (!rows.length) {
+        setStatus({ variant: "warning", text: "Nothing to export yet." });
+        return;
       }
-      data += '\r\n';
-   }
-   myEf.set("text/csv","directory.csv",data);
-   myEf.get();
+      const columns = Object.keys(rows[0]);
+      const escape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const csv = [
+        columns.join(","),
+        ...rows.map((r) => columns.map((c) => escape(r[c])).join(",")),
+      ].join("\r\n");
+
+      await saveFile("text/csv", "directory.csv", csv);
+      setStatus({ variant: "success", text: `Exported ${rows.length} rows.` });
+    } catch (e) {
+      setStatus({ variant: "danger", text: e.message });
+    }
+  }
+
+  return html`
+    <${Panel} title="Export">
+      <p>
+        Writes the directory out as CSV and hands it to the device — the system
+        share sheet on Android, a download in a browser on your network.
+      </p>
+      <${Button} variant="primary" onClick=${exportCsv}>Export CSV<//>
+      ${status
+        ? html`<${Alert} variant=${status.variant} className="mt-3">
+            ${status.text}
+          <//>`
+        : null}
+    <//>`;
 }
 
-function showModal(){
-   myModal = new xbModal("aCelery Modal");
-   myModal.addCloseButton("Close","btn-primary");
-   myModal.addToBody(new xbPara("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin et erat et metus auctor cursus. Ut congue facilisis velit sit amet dapibus"));
-   myModal.show();
+/**
+ * A chart over the data the Directory holds.
+ *
+ * `fromRows` is the step between a result set and a Chart.js config, which is
+ * otherwise written once per app: group in SQL, chart the rows.
+ */
+function ChartDemo({ db }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let live = true;
+    db.select(
+      "select coalesce(nullif(grp, ''), 'unassigned') as grp, count(*) as people" +
+        " from person group by grp order by people desc",
+    ).then(
+      (rows) => live && setData(rows),
+      (e) => live && setError(e.message),
+    );
+    return () => { live = false; };
+  }, [db]);
+
+  if (error) return html`<${Alert} variant="danger">${error}<//>`;
+  if (!data) return html`<p class="text-body-secondary">Counting…</p>`;
+
+  return html`
+    <${Panel} title="People per group">
+      ${data.length
+        ? html`
+            <${Row}>
+              <${Col} span=${6}>
+                <${Chart} type="bar" height=${260}
+                  data=${fromRows(data, "grp", "people")} />
+              <//>
+              <${Col} span=${6}>
+                <${Chart} type="doughnut" height=${260}
+                  data=${fromRows(data, "grp", "people")} />
+              <//>
+            <//>
+            <p class="text-body-secondary mt-3 mb-0">
+              One query, two charts. Add people in the Directory and come back.
+            </p>`
+        : html`<${Alert} variant="secondary">
+            Nothing to chart yet — add someone in the Directory first.
+          <//>`}
+    <//>`;
 }
 
-function dirMaint(dbl){
-   var person = new xbTableMaint(db,"Directory","person")
-                 .addField(new xbField("string","Name","mname",true,true)
-                               .addValidator(new xbNotEmptyValidator()))
-                 .addField(new xbField("email","Email","email",false,true)
-                               .addValidator(new xbEmailValidator()))
-                 .addField(new xbListField("string","Group","grp",false,true)
-                               .addOption("Work","w")
-                               .addOption("Friends","f")
-                               .addOption("Family","m"));
-   if (dbl == "2"){
-      var person_tel = new xbTableMaint(db,"Telephones","person_tel")
-                           .addField(new xbField("number","Person","person",false,false))
-                           .addField(new xbField("tel","Telephone","tel",true,false)
-                                         .addValidator(new xbTelValidator()))
-                           .addField(new xbListField("string","Type","type",true,false)
-                                         .addOption("Work","w")
-                                         .addOption("Home","h")
-                                         .addOption("Mobile","m"));
-      person.addLinkedTable(person_tel,"person");
-   }
-   if (e = topLayout.getElement(1,0))
-      e.remove();
-   topLayout.addElement(person,1,0);
-   person.run();
+/** The front page. */
+const Welcome = () => html`
+  <${Panel} title="aCelery Example">
+    <p>
+      This app is the reference for writing your own. Its source is one file,
+      <code>example.js</code>, and every screen above is a component in it.
+    </p>
+    <${ListGroup} variant="flush">
+      <${ListGroup.Item}>
+        <strong>Directory</strong> — declare fields, get a working CRUD screen
+      <//>
+      <${ListGroup.Item}>
+        <strong>Linked</strong> — a child table inside each record
+      <//>
+      <${ListGroup.Item}>
+        <strong>Widgets</strong> — forms, validation and a responsive layout
+      <//>
+      <${ListGroup.Item}>
+        <strong>Chart</strong> — group in SQL, chart the rows
+      <//>
+      <${ListGroup.Item}>
+        <strong>Export</strong> — build a file and hand it to the device
+      <//>
+    <//>
+  <//>`;
+
+/* ------------------------------------------------------------------- shell */
+
+const SCREENS = {
+  welcome: Welcome,
+  directory: Directory,
+  linked: LinkedDirectory,
+  tabs: TabsDemo,
+  widgets: WidgetsDemo,
+  modal: ModalDemo,
+  chart: ChartDemo,
+  export: ExportDemo,
+};
+
+function App() {
+  const [db, setDb] = useState(null);
+  const [failure, setFailure] = useState(null);
+  const [screen, setScreen] = useState("welcome");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const nav = useRef(null);
+
+  /* The collapsed menu overlays the page rather than pushing it down, so it
+     closes on a tap outside as well as on a choice. `useDismiss` is part of
+     the widget layer; an app's own panels can use it too. */
+  useDismiss(nav, () => setMenuOpen(false), menuOpen);
+
+  useEffect(() => {
+    let live = true;
+    openDatabase().then(
+      (opened) => live && setDb(opened),
+      (e) => live && setFailure(e.message),
+    );
+    return () => { live = false; };
+  }, []);
+
+  /** Choosing anything closes the menu, which a phone needs and a desktop
+      does not mind. */
+  const go = (next) => {
+    setScreen(next);
+    setMenuOpen(false);
+  };
+
+  const Screen = SCREENS[screen];
+
+  return html`
+    <${Navbar} expand="lg" className="bg-body-tertiary mb-3"
+               expanded=${menuOpen} onToggle=${setMenuOpen}>
+      <${Container} fluid ref=${nav}>
+        <${Navbar.Toggle} aria-controls="example-nav" />
+        <${Navbar.Brand} href="#" onClick=${() => go("welcome")}>aCelery<//>
+        <${Navbar.Collapse} id="example-nav">
+          <${Nav} className="ms-auto">
+            <${NavDropdown} title="Directory" id="example-directory">
+              <${NavDropdown.Item} onClick=${() => go("directory")}>
+                CRUD Single
+              <//>
+              <${NavDropdown.Item} onClick=${() => go("linked")}>
+                CRUD Linked
+              <//>
+              <${NavDropdown.Divider} />
+              <${NavDropdown.Item} onClick=${() => go("export")}>Export<//>
+            <//>
+            <${Nav.Link} onClick=${() => go("tabs")}>Tabs<//>
+            <${Nav.Link} onClick=${() => go("widgets")}>Widgets<//>
+            <${Nav.Link} onClick=${() => go("chart")}>Chart<//>
+            <${Nav.Link} onClick=${() => go("modal")}>Modal<//>
+            <${Nav.Link} onClick=${closeApp}>Exit<//>
+          <//>
+        <//>
+      <//>
+    <//>
+
+    <${Container} fluid>
+      ${failure
+        ? html`<${Alert} variant="danger">${failure}<//>`
+        : db
+          ? html`<${Screen} db=${db} />`
+          : html`<p class="text-muted">Opening the database…</p>`}
+    <//>`;
 }
 
-function exit(){
-   xCloseApp();
-}
-
-function showMenu(){
-   var nav, dir;
-   
-   nav = new xbNavBar("aCelery","acelery_navbar");
-   dir = new xbNavBarDropdown("Directory");
-   dir.addItem(new xbNavBarItem("CRUD Single")
-                    .bindFunction(function(){dirMaint("1")}));
-   dir.addItem(new xbNavBarItem("CRUD Linked")
-                    .bindFunction(function(){dirMaint("2")}));
-   dir.addItem(new xbNavBarItem("Export")
-                    .bindFunction(dirExport));
-   nav.addDropdown(dir);
-   nav.addItem(new xbNavBarItem("Tabs")
-                   .bindFunction(tabsTest));
-   nav.addItem(new xbNavBarItem("Widgets")
-                   .bindFunction(widgetTest));
-   nav.addItem(new xbNavBarItem("News")
-                   .bindFunction(jsonNews));
-   nav.addItem(new xbNavBarItem("Modal")
-                   .bindFunction(showModal));
-   nav.addItem(new xbNavBarItem("Exit")
-                   .bindFunction(exit));
-   topLayout = new xbLayout(2,1)
-                  .addElement(nav,0,0)
-                  .setToTop();
-}
-
-function main(){
-   initDB();
-   showMenu();
+/**
+ * The entry point. launcher.html imports this module and calls the default
+ * export; acelery_app.json names the file.
+ */
+export default function main() {
+  render(html`<${App} />`, document.body);
 }

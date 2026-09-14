@@ -325,14 +325,99 @@ IDE main menu, My Apps, launching the Example app, its navbar and dropdown,
 `bootstrap.Modal`, and the IDE's `Project` dropdown with per-item enable and
 disable states all render and behave correctly, with a clean console.
 
-### Phase 4 — optional, decide separately
+### Phase 4 — the UI layer
 
-- **CodeMirror 4.6.0 (2014) → CodeMirror 6.** It is 2.6 MB and ~500 of the 690
-  files — by far the largest single item, and a full rewrite (CM6 has a wholly
-  different API). Worth doing eventually; not required for the port. Keeping
-  CM4 works.
-- The 19 bootswatch themes are 3.3 MB for a feature (`xbTheme`) exercised once
-  in the Example app. Consider shipping 3–4.
+Planned in full in `doc/js-ui-framework-evaluation.md` §8. Progress:
+
+**Phase 4a — foundations ✅ done (2026-09-14)**
+
+1. All four pages got `<!DOCTYPE html>`, a charset, and `lang="en"`, so they
+   leave quirks mode; `maximum-scale=1, user-scalable=no` dropped from the three
+   system pages (evaluation §7.1, §7.2).
+2. Unreferenced vendored mass deleted: CodeMirror's 51 addons, 228 KB of
+   keymaps, 78 of 84 modes and all 89 demo `index.html` pages the embedded
+   server was exposing to the LAN, plus the dead top-level
+   `tools/css/bootstrap.min.css`. **2.6 MB → 592 KB** of CodeMirror; the bundle
+   as a whole **7.3 MB → 5.4 MB**, 464 files → 122.
+3. `tool/build_js.sh` added: an esbuild pass over `web/src/` producing the
+   vendored `acelery/*` modules, wired into `tool/build_bundle.sh` and stamped
+   so a stale build fails a test. Node is needed to *rebuild*, never to pack.
+
+**Phase 4b — the bridge ✅ done (2026-09-14)**
+
+4. `web/src/acelery/{bridge,sql,file,http,export}.js`: async ES modules on
+   `fetch`. `db.select(sql, args)` returns the whole result set in one call and
+   binds its parameters, replacing the per-row cursor walk and the `btoa`
+   transport encoding. Errors carry SQLite's message rather than returning -1.
+5. Dart side: `opt=sql&action=query|run|insertrow` accept a JSON body
+   `{handle, sql, args}`. The cursor routes stay until Phase 4d retires the
+   legacy library with the IDE rewrite.
+6. The 29 `typeof Android != "undefined"` branches deleted from `xscript.js`
+   (1,941 → 1,793 lines). The host has never registered that channel, so they
+   had been unreachable since Phase 2.
+
+**Phase 4c — the widget layer ✅ done (2026-09-14)**
+
+7. `web/src/ui/` → `acelery/ui.js`: Preact + htm + react-bootstrap on
+   `preact/compat`, 127 KB raw / 45 KB gzipped, plus a `<Form>` that collects
+   and validates its fields, labelled inputs that own their `for`/`id` pairing,
+   `<Panel>`, and `<Row>`/`<Col>` on the Bootstrap grid — aCelery's first
+   responsive layout.
+8. All 18 themes as rule deltas over one stock Bootstrap: **4.1 MB → 908 KB**.
+   CSS custom properties alone turned out not to retheme Bootstrap 5.3 at all;
+   see `js-ui-framework-evaluation.md` §3.4's correction.
+9. Import map and ES-module app loading in `launcher.html`; `acelery_app.json`
+   gains `"entry"`; `lazyload.js` deleted.
+
+Two host-side changes fell out of it, both recorded in `lib/`:
+
+- `BundleInstaller` now refreshes shipped sample apps while still never
+  touching a project the user created. It previously froze `www/user/Example`
+  at whatever version first installed.
+- Static responses carry `Cache-Control: no-cache`, so the WebView revalidates.
+  Without it, edit-then-Run served the previous version of a file.
+
+**Phase 4d — the product ✅ done (2026-09-14)**
+
+10. `TableMaint` rebuilt as a component: all five views, rowid pagination,
+    slave mode, every field type, every pre/post hook — parameterised, async,
+    and without the five `this.clear()` sites that demolished the card body on
+    every navigation.
+11. CodeMirror 4 replaced by a tree-shaken CodeMirror 6 (566 KB, four
+    languages), with line wrapping — the phone-first property §3.7 chose it for.
+12. The IDE rewritten as `acelery/ide.js`. `system/index.html` went from 1,024
+    lines and seven classic `<script>` tags to a page that loads two ES modules
+    and nothing else.
+13. The Example app rewritten as the reference it is supposed to be.
+
+**Phase 4e — additions ✅ done (2026-09-14)**
+
+14. `<Chart>` on Chart.js, as its own bundle so an app pays for it only by
+    importing it.
+15. Native date inputs; Tempus Dominus deleted (−136 KB).
+16. Font Awesome subset to the nine glyphs the product draws: **372 KB →
+    2.5 KB**.
+17. Signals verified unnecessary and deliberately not added.
+
+**Phase 4 is complete.** The bundle went **7.3 MB → 2.1 MB** expanded and
+1.72 MB → 725 KB zipped, and `assets/aCelery.zip` now contains 70 files against
+the original 690.
+
+**Still open:** decisions 7, 8 and 10 in `js-ui-framework-evaluation.md` §9
+(editor themes, PHP/Java highlighting, the untrusted-data threat model), none of
+which gate anything. One verification is outstanding: §3.9's native date pickers
+have not been checked on iOS WKWebView, because there is no iOS device in this
+loop.
+
+
+`launcher.html` and `errorlog.html` are the last two pages still on the 2014
+library — the launcher deliberately, since it hosts user apps that may be
+written against it.
+
+Also still outstanding, independent of the above:
+
+- The 18 bootswatch themes are 4.1 MB for a feature (`xbTheme`) exercised once
+  in the Example app. Phase 4c replaces them with `data-bs-theme`.
 - `Example/example.js`'s `jsonNews()` calls the Google Feed API, **dead since
   2016**. Replace the demo or drop that menu item.
 
@@ -340,14 +425,31 @@ disable states all render and behave correctly, with a clean console.
 
 ## 5. What this plan deliberately does not do
 
-- **No rewrite of xScript's synchronous model.** Async-ifying 28 bridge methods
-  would force every user app ever written to be rewritten. The HTTP fallback
-  preserves the contract exactly.
-- **No Dart port of the widget layer.** The product *is* the JS API; users'
-  apps are written against it. It stays JS.
+> **Revised 2026-09-14.** The first two entries rested on backward compatibility
+> with user apps in the wild. **aCelery was never launched; there are none.**
+> `doc/js-ui-framework-evaluation.md` §1 sets this out, and §2 flagged both
+> entries for revision before Phase 4. They are rewritten below. The original
+> text is kept struck through, because the reasoning is what changed, not the
+> measurements.
+
+- ~~**No rewrite of xScript's synchronous model.** Async-ifying 28 bridge
+  methods would force every user app ever written to be rewritten.~~
+  **Void.** There are no user apps, so nothing is forced to be rewritten — and
+  the sync model is why the UI freezes during every database call. **The bridge
+  is async-only; there is no synchronous path.** Landed in Phase 4b: the new
+  `acelery/*` modules use `fetch` and `await`, and the cursor protocol is
+  replaced by one round-trip per statement with bound parameters.
+- ~~**No Dart port of the widget layer.** The product *is* the JS API; users'
+  apps are written against it.~~ **The conclusion holds; the reason does not.**
+  The UI stays web technology because **LAN remote access requires it** — an app
+  must render in a desktop browser over the network, which a Flutter widget tree
+  cannot do. Stated the old way, the next person to read this would conclude the
+  widget layer is untouchable, which is exactly backwards: it is being replaced
+  in Phase 4c.
 - **No change to the on-disk layout.** `aCelery/{db,files,log,www}` and
-  `acelery_app.json` stay as they are, so existing exported projects still
-  import.
+  `acelery_app.json` stay as they are. (The "so existing exported projects still
+  import" rationale is moot, but the layout is fine and there is no reason to
+  churn it. Phase 4c adds one optional `"entry"` field to the manifest.)
 
 ---
 
@@ -355,7 +457,7 @@ disable states all render and behave correctly, with a clean console.
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| Chromium drops sync XHR on the main thread | **High** — kills the bridge | No action now; it is still supported. Knowing this is the single point of failure is the mitigation. |
+| ~~Chromium drops sync XHR on the main thread~~ | **Not applicable** | **Retired in Phase 4b.** The `acelery/*` modules use `fetch`; no sync XHR remains in the new bridge. (It was over-rated anyway: Chromium's removal programme stalled after the Chrome 80 page-dismissal restriction.) The legacy `xscript.js` bridge still uses it until Phase 4d retires it with the IDE rewrite. |
 | WebView blocks cleartext to localhost | Medium | **Done in Phase 2**: `android/app/src/main/res/xml/network_security_config.xml` permits cleartext to `localhost`/`127.0.0.1` only and blocks it everywhere else; iOS `Info.plist` carries `NSAllowsLocalNetworking`. Verified in the merged manifest. |
 | BS3→BS5 class strings passed by hand | Medium | Phase 3.6 audit; contained to 2 files. |
 | Unzip-on-upgrade destroying user projects | **High** — data loss | Phase 0: never overwrite `www/user`, `db`, `files`. Bug present in the original. |

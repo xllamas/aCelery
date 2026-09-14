@@ -11,6 +11,16 @@
 set -e
 cd "$(dirname "$0")/.."
 
+# The vendored modules under bundle/www/tools/js/acelery are built from web/.
+# The output is committed, so this is a refresh when the toolchain is here and
+# a no-op when it is not -- a checkout without node still packs a working zip.
+# tool/build_js.sh is the way to rebuild it deliberately.
+if [ -d web/node_modules ]; then
+  sh tool/build_js.sh
+else
+  echo "web/node_modules absent: packing the committed bundle/www/tools/js/acelery"
+fi
+
 rm -f assets/aCelery.zip
 mkdir -p assets
 

@@ -46,3 +46,8 @@ app.*.map.json
 
 # Legacy native Android app (pre-Flutter), kept locally for reference
 /original/
+
+# The JS build toolchain for web/ (see tool/build_js.sh). The build *output*
+# under bundle/www/tools/js/acelery is committed on purpose, so a checkout
+# without node still packs a working bundle.
+web/node_modules/
