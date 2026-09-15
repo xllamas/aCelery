@@ -305,7 +305,7 @@ void main() {
       // "Remember the decision" — §2 item 2. Pairing on every launch would be
       // the kind of friction that gets a feature turned off permanently.
       await server.access.setShared(true);
-      final store = File('${paths.base}/.acelery-access.json');
+      final store = File(paths.accessStore);
       expect(store.existsSync(), isTrue);
 
       final fresh = AccessControl(storeFile: store);
@@ -314,17 +314,20 @@ void main() {
       fresh.dispose();
     });
 
-    test('is not inside the document root', () async {
-      // It holds bearer tokens, and everything under www/ is served.
-      final store = File('${paths.base}/.acelery-access.json');
+    test('is not inside the aCelery tree', () async {
+      // It holds bearer tokens. Everything under www/ is served, and the file
+      // bridge reads anything under the tree, so outside www/ is not enough.
+      final store = server.access.storeFile;
       await server.access.setShared(true);
-      expect(store.path, isNot(contains('/www/')));
+      expect(store.existsSync(), isTrue);
+      expect(store.path, paths.accessStore);
       expect(ACeleryPaths.isInside(Directory(paths.wwwRoot), store), isFalse);
+      expect(ACeleryPaths.isInside(Directory(paths.base), store), isFalse);
     });
 
     test('a corrupt store means nobody is paired', () async {
       // The safe reading of "we do not know who is allowed".
-      final store = File('${paths.base}/.acelery-access.json');
+      final store = File(paths.accessStore);
       await store.writeAsString('{ this is not json');
 
       final fresh = AccessControl(storeFile: store);

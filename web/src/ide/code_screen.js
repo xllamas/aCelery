@@ -18,6 +18,7 @@ import {
   EmptyState, IconButton, InlineError, ProjectCard, Sheet, Skeleton, useToast,
 } from "./parts.js";
 import { navigate, takeIntent } from "./router.js";
+import { descriptionProblem, nameProblem } from "./scaffold.js";
 import { createProject, deleteProject, hasHost, listProjects } from "./store.js";
 import {
   SearchField, SEARCH_THRESHOLD, confirmDeleteProject, matches,
@@ -41,15 +42,12 @@ function NewProjectSheet({ show, existing, onClose, onCreate }) {
             autocapitalize="off" autocomplete="off" spellcheck=${false}
             validate=${[
               notEmpty("A name is required"),
-              (v) => (/^\w{1,16}$/.test((v ?? "").trim()) ? true
-                : "Letters, numbers and underscore only, 16 at most"),
+              (v) => nameProblem(v) ?? true,
               taken,
             ]} />
           <${Input} label="Description" name="description" as="textarea"
             placeholder="What it does, in a sentence (optional)"
-            validate=${[
-              (v) => ((v ?? "").length <= 140 ? true : "140 characters at most"),
-            ]} />
+            validate=${[(v) => descriptionProblem(v) ?? true]} />
         <//>
         <${Modal.Footer}>
           <${Button} variant="outline-secondary" type="button" onClick=${onClose}>

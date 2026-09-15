@@ -34,7 +34,7 @@ class ACeleryServer {
         export = ExportBridge(paths: paths),
         access = access ??
             AccessControl(
-              storeFile: File('${paths.base}/.acelery-access.json'),
+              storeFile: File(paths.accessStore),
             );
 
   /// The port the bundle hard-codes in `xRunUserApp` and the IDE's URLs.

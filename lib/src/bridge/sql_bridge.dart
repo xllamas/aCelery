@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:sqflite_common/sqlite_api.dart';
@@ -93,23 +94,45 @@ class SqlBridge {
 
   /// `bpath` overrides the default db directory when supplied, matching
   /// `xSqlOpen(path, bpath)`.
-  String _resolve(String path, String? basePath) =>
-      (basePath == null || basePath.isEmpty)
-          ? ACeleryPaths.normalize('${paths.dbRoot}$path')
-          : ACeleryPaths.normalize('$basePath$path');
+  ///
+  /// Returns null for anything outside the aCelery tree. FileBridge made this
+  /// check from the start and this bridge did not, so `opendb` could create a
+  /// database — and `deletedb` delete a file — anywhere the process could
+  /// write, from any peer allowed to reach the server (doc/mcp-server.md §6).
+  String? _resolve(String path, String? basePath) {
+    final resolved = (basePath == null || basePath.isEmpty)
+        ? ACeleryPaths.normalize('${paths.dbRoot}$path')
+        : ACeleryPaths.normalize('$basePath$path');
+    return ACeleryPaths.isInside(Directory(paths.base), File(resolved))
+        ? resolved
+        : null;
+  }
 
   /// Returns the new handle, or -1 if the database could not be opened.
-  Future<int> openDb(String path, String? basePath) async {
+  ///
+  /// A [readOnly] handle cannot write, and never creates a missing file —
+  /// what an inspection tool wants, so that looking at data cannot change it.
+  Future<int> openDb(
+    String path,
+    String? basePath, {
+    bool readOnly = false,
+  }) async {
+    final resolved = _resolve(path, basePath);
+    if (resolved == null) return -1;
+    if (readOnly && !File(resolved).existsSync()) return -1;
     try {
       final db = await factory.openDatabase(
-        _resolve(path, basePath),
+        resolved,
         // One connection per handle. sqflite's default shares a single
         // instance per path, so closing any handle closed the database under
         // every other handle on the same file — the shell saving a setting
         // closed acelery.db beneath the Data screen browsing it, and every
         // query after that failed. Android's SQLiteDatabase, which this
         // replaces, never shared one either.
-        options: OpenDatabaseOptions(singleInstance: false),
+        options: OpenDatabaseOptions(
+          singleInstance: false,
+          readOnly: readOnly,
+        ),
       );
       return _databases.add(db);
     } on DatabaseException {
@@ -121,12 +144,17 @@ class SqlBridge {
     await _databases.remove(handle)?.close();
   }
 
-  Future<void> deleteDb(String path, String? basePath) async {
+  /// Returns false when the path is refused. A failure to delete is not
+  /// reported: the Java version logged and swallowed it.
+  Future<bool> deleteDb(String path, String? basePath) async {
+    final resolved = _resolve(path, basePath);
+    if (resolved == null) return false;
     try {
-      await factory.deleteDatabase(_resolve(path, basePath));
+      await factory.deleteDatabase(resolved);
     } on DatabaseException {
-      // The Java version logged and swallowed this too.
+      // Swallowed, as above.
     }
+    return true;
   }
 
   Future<void> exec(int handle, String query) async {

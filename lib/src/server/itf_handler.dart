@@ -102,7 +102,11 @@ class ItfHandler {
       case 'opendb':
         final path = q['path'];
         if (path == null) return _badRequest;
-        final handle = await sql.openDb(path, q['bpath']);
+        final handle = await sql.openDb(
+          path,
+          q['bpath'],
+          readOnly: q['readonly'] == 'true',
+        );
         if (handle < 0) return _serverError;
         return _json({'handle': '$handle'});
 
@@ -115,7 +119,7 @@ class ItfHandler {
       case 'deletedb':
         final path = q['path'];
         if (path == null) return _badRequest;
-        await sql.deleteDb(path, q['bpath']);
+        if (!await sql.deleteDb(path, q['bpath'])) return _serverError;
         return _json(const {});
 
       case 'exec':

@@ -12,6 +12,7 @@ import 'package:acelery/src/paths.dart';
 import 'package:acelery/src/server/acelery_server.dart';
 import 'package:archive/archive.dart';
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:test/test.dart';
 
@@ -533,6 +534,93 @@ void main() {
       final response = await raw(
           'opt=file&action=openfile&path=${Uri.encodeComponent('../../escape')}');
       expect(response.statusCode, 500);
+    });
+  });
+
+  group('confinement', () {
+    // FileBridge checked every path against the aCelery tree from the start.
+    // SqlBridge did not: `opendb` and `deletedb` reached anywhere the process
+    // could write, which a paired device on the network — an MCP server, say —
+    // could use to delete files outside aCelery (doc/mcp-server.md §6, S1).
+    test('opendb refuses a path that leaves the tree', () async {
+      final response = await raw('opt=sql&action=opendb'
+          '&path=${Uri.encodeComponent('../../escape.db')}');
+      expect(response.statusCode, 500);
+      expect(File('${tmp.path}/escape.db').existsSync(), isFalse);
+    });
+
+    test('opendb refuses a base path outside the tree', () async {
+      final response = await raw('opt=sql&action=opendb&path=escape.db'
+          '&bpath=${Uri.encodeComponent('${tmp.path}/')}');
+      expect(response.statusCode, 500);
+      expect(File('${tmp.path}/escape.db').existsSync(), isFalse);
+    });
+
+    test('deletedb refuses a path that leaves the tree', () async {
+      final victim = File('${tmp.path}/victim.db')..writeAsStringSync('keep');
+      final response = await raw('opt=sql&action=deletedb'
+          '&path=${Uri.encodeComponent('../../victim.db')}');
+      expect(response.statusCode, 500);
+      expect(victim.existsSync(), isTrue);
+    });
+
+    test('a database inside the tree still opens by base path', () async {
+      // Apps pass bpath; confining it must not break them.
+      final response = await raw('opt=sql&action=opendb&path=inside.db'
+          '&bpath=${Uri.encodeComponent(paths.filesRoot)}');
+      expect(response.statusCode, 200);
+    });
+
+    test('the access store cannot be reached through the file routes',
+        () async {
+      // It holds every paired device's bearer token (§6, S2). Serving is not
+      // the only way out of the tree: opt=file reads anything inside it.
+      await server.access.setShared(false); // writes the store
+      final store = server.access.storeFile;
+      expect(store.existsSync(), isTrue);
+
+      final relative = p.relative(store.path, from: paths.filesRoot);
+      final byPath = await raw('opt=file&action=openfile'
+          '&path=${Uri.encodeComponent(relative)}');
+      expect(byPath.statusCode, 500, reason: 'path=$relative');
+
+      final byBase = await raw('opt=file&action=openfile'
+          '&path=${Uri.encodeComponent(p.basename(store.path))}'
+          '&bpath=${Uri.encodeComponent(store.parent.path)}');
+      expect(byBase.statusCode, 500, reason: 'bpath=${store.parent.path}');
+    });
+  });
+
+  group('opt=sql — read-only handles', () {
+    // What an MCP server's query tool opens, so that "look at the data" cannot
+    // change it (§6, S3).
+    test('a read-only handle reads but cannot write', () async {
+      final rw = (await get('opt=sql&action=opendb&path=ro.db'))['handle'];
+      await callJson('opt=sql&action=run',
+          {'handle': rw, 'sql': 'create table t (x integer)'});
+      await callJson('opt=sql&action=insertrow',
+          {'handle': rw, 'sql': 'insert into t values (?)', 'args': [1]});
+      await get('opt=sql&action=closedb&handle=$rw');
+
+      final ro = (await get(
+          'opt=sql&action=opendb&path=ro.db&readonly=true'))['handle'];
+      final read = await callJson(
+          'opt=sql&action=query', {'handle': ro, 'sql': 'select x from t'});
+      expect(read['rows'], [
+        {'x': 1}
+      ]);
+
+      final write = await postJson('opt=sql&action=run',
+          {'handle': ro, 'sql': 'insert into t values (2)'});
+      expect(write.statusCode, 500);
+      expect(jsonDecode(write.body)['error'], contains('readonly'));
+    });
+
+    test('opening a missing database read-only does not create it', () async {
+      final response =
+          await raw('opt=sql&action=opendb&path=nothere.db&readonly=true');
+      expect(response.statusCode, 500);
+      expect(File('${paths.dbRoot}nothere.db').existsSync(), isFalse);
     });
   });
 

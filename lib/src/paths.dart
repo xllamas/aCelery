@@ -37,6 +37,13 @@ class ACeleryPaths {
 
   String userProjectDir(String project) => '$base/www/user/$project';
 
+  /// Who is paired with the server, and whether it is shared on the network.
+  ///
+  /// Outside [base], not merely outside [wwwRoot]: it holds bearer tokens, and
+  /// the file bridge reads and writes anything inside [base]. It used to sit
+  /// at `$base/.acelery-access.json`, where `opt=file` could open it.
+  String get accessStore => '$root/.acelery/access.json';
+
   /// Directories that hold user-created content and must survive a bundle
   /// upgrade. The Java original unzipped unconditionally over the whole tree,
   /// which destroyed user projects and databases on every app update.

@@ -30,8 +30,9 @@ class AccessControl {
 
   /// Where pairings and the sharing setting persist.
   ///
-  /// Deliberately outside `www/`: it holds bearer tokens, and everything under
-  /// the document root is served.
+  /// Deliberately outside the aCelery tree ([ACeleryPaths.accessStore]): it
+  /// holds bearer tokens. Outside `www/` was not enough — static serving is
+  /// only one way out, and the file bridge reads anything under the tree.
   final File storeFile;
 
   final Random _random;

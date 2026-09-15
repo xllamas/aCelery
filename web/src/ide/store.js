@@ -8,6 +8,8 @@
 import * as file from "acelery/file.js";
 import { openDB } from "acelery/sql.js";
 
+import { ENTRY, entryModule, manifestText, projectName } from "./scaffold.js";
+
 /* ----------------------------------------------------------------- config */
 
 /**
@@ -156,34 +158,23 @@ export async function deleteProject(name) {
   await handle.delete();
 }
 
-/** What the entry module of a brand-new project contains. */
-const SCAFFOLD = (name) => `import { html, render, Panel } from "acelery/ui.js";
-
-export default function main() {
-  render(html\`
-    <\${Panel} title="${name}">
-      <p>Your app starts here.</p>
-    <//>\`, document.body);
-}
-`;
-
 /**
- * Creates a project folder, its manifest and a runnable entry module. The name
- * is capitalised, as createProject() always did.
+ * Creates a project folder, its manifest and a runnable entry module, from the
+ * scaffold the MCP server shares (scaffold.js). The name is capitalised, as
+ * createProject() always did.
  *
  * @returns {Promise<string>} the name actually used
  */
 export async function createProject({ name, description }) {
-  const trimmed = name.trim();
-  const pName = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  const pName = projectName(name);
   const base = await userBase();
   await file.mkdir(pName, base);
   await writeProjectFile(
     pName,
     "acelery_app.json",
-    JSON.stringify({ name: pName, description, entry: "main.js" }),
+    manifestText(pName, description),
   );
-  await writeProjectFile(pName, "main.js", SCAFFOLD(pName));
+  await writeProjectFile(pName, ENTRY, entryModule(pName));
   return pName;
 }
 

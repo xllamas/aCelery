@@ -722,13 +722,16 @@ void main() {
       final decoded = jsonDecode(manifest) as Map<String, Object?>;
       expect(decoded['entry'], 'example.js');
 
-      // The scaffold moved to the shell's store when the IDE became the Code
-      // destination (doc/shell-redesign.md §6.1).
-      final ide = File('web/src/ide/store.js').readAsStringSync();
-      expect(ide, contains('entry: "main.js"'),
+      // The scaffold moved to its own import-free module so the MCP server can
+      // share it (doc/mcp-server.md §2); the shell's store creates from it.
+      final scaffold = File('web/src/ide/scaffold.js').readAsStringSync();
+      expect(scaffold, contains('export const ENTRY = "main.js"'));
+      expect(scaffold, contains('entry: ENTRY'),
           reason: 'new projects must get an entry field');
-      expect(ide, contains('export default function main'),
+      expect(scaffold, contains('export default function main'),
           reason: 'new projects must get a runnable entry module');
+      expect(File('web/src/ide/store.js').readAsStringSync(),
+          contains('from "./scaffold.js"'));
     });
 
     test('the Example app exports its entry point', () {
