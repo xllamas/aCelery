@@ -113,6 +113,35 @@ void main() {
       await get('opt=sql&action=closedb&handle=$handle');
     });
 
+    test('two handles on one file are independent', () async {
+      // The shell writes a setting to acelery.db while the Data screen may
+      // have acelery.db open. With sqflite's shared instance per path, the
+      // settings write's closedb closed the other handle too, and its next
+      // query failed.
+      final first =
+          (await get('opt=sql&action=opendb&path=shared.db'))['handle'] as String;
+      final second =
+          (await get('opt=sql&action=opendb&path=shared.db'))['handle'] as String;
+      expect(first, isNot(second));
+
+      await callJson('opt=sql&action=run', {
+        'handle': int.parse(first),
+        'sql': 'create table t (n integer)',
+        'args': <Object?>[],
+      });
+      await get('opt=sql&action=closedb&handle=$first');
+
+      final result = await callJson('opt=sql&action=query', {
+        'handle': int.parse(second),
+        'sql': 'select count(*) as n from t',
+        'args': <Object?>[],
+      });
+      expect(result['rows'], [
+        {'n': 0},
+      ]);
+      await get('opt=sql&action=closedb&handle=$second');
+    });
+
     test('gotolastrow then getprevrow walks backwards', () async {
       final handle = (await get('opt=sql&action=opendb&path=b.db'))['handle'];
       await get('opt=sql&action=exec&handle=$handle'

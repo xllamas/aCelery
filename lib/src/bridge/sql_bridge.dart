@@ -101,7 +101,16 @@ class SqlBridge {
   /// Returns the new handle, or -1 if the database could not be opened.
   Future<int> openDb(String path, String? basePath) async {
     try {
-      final db = await factory.openDatabase(_resolve(path, basePath));
+      final db = await factory.openDatabase(
+        _resolve(path, basePath),
+        // One connection per handle. sqflite's default shares a single
+        // instance per path, so closing any handle closed the database under
+        // every other handle on the same file — the shell saving a setting
+        // closed acelery.db beneath the Data screen browsing it, and every
+        // query after that failed. Android's SQLiteDatabase, which this
+        // replaces, never shared one either.
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
       return _databases.add(db);
     } on DatabaseException {
       return -1;
