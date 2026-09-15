@@ -430,6 +430,11 @@ recommended direction, with the iOS remote-access scope decided up front.
 
 # Addendum 3 — An MCP server for AI-authored aCelery mini-apps
 
+**Superseded by `doc/mcp-server.md`.** The conclusion below — that this fits
+aCelery unusually well — still holds, but the design does not: the server is a
+route inside the app, not a separate program on a developer's machine, and the
+framework reference it proposes generating from `xscript*.js` no longer exists.
+
 Assesses adding a **Model Context Protocol (MCP)** server so an AI assistant can
 **create, run, and debug** aCelery mini-apps. Verdict: **highly feasible, and
 the existing architecture already provides most of the plumbing.** The same
