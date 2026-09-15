@@ -75,46 +75,137 @@ const THEMES = {
 /** Themes that ask Bootstrap for its dark colour mode. */
 const DARK = ["cyborg", "darkly", "slate", "superhero"];
 
-/** The aCelery palette, as both tokens and the component rules that use them. */
+/**
+ * The aCelery palette, in light and dark (doc/shell-redesign.md §5.1).
+ *
+ * Every text pairing below was measured for WCAG AA contrast; the ratios are in
+ * the design doc. `--ac-celery` fails as text (2.87:1 on white) and is only
+ * ever decoration. The old brand colour, #86a0a4, measured 2.63:1 against the
+ * navbar it sat on, so the brand now uses the primary.
+ *
+ * Unlike the Bootswatch deltas this palette sets Bootstrap's surface and text
+ * tokens too, because it has a dark mode of its own: the tokens are what carry
+ * both modes into every component that reads them.
+ *
+ * Component rules are scoped with :where() for the reason `scope()` documents:
+ * a scoped rule must keep the specificity it would have had unscoped.
+ */
 const ACELERY = `
 :root[data-acelery-theme="acelery"] {
-  --bs-primary: #586d72;
-  --bs-primary-rgb: 88, 109, 114;
-  --bs-link-color: #586d72;
-  --bs-link-color-rgb: 88, 109, 114;
-  --bs-link-hover-color: #465a5e;
-  --bs-link-hover-color-rgb: 70, 90, 94;
-  /* The brand only. Setting --bs-navbar-color here would tint every nav link
-     the same pale teal, which on a light navbar reads as "disabled" — the
-     whole menu looked greyed out. */
-  --bs-navbar-brand-color: #86a0a4;
-  --bs-navbar-brand-hover-color: #6f878b;
+  --bs-primary: #3d6b63;
+  --bs-primary-rgb: 61, 107, 99;
+  --bs-link-color: #3d6b63;
+  --bs-link-color-rgb: 61, 107, 99;
+  --bs-link-hover-color: #2f534d;
+  --bs-link-hover-color-rgb: 47, 83, 77;
+  --bs-body-color: #1b2426;
+  --bs-body-color-rgb: 27, 36, 38;
+  --bs-secondary-color: #5a676a;
+  --bs-secondary-bg: #eef2f1;
+  --bs-tertiary-bg: #f5f7f6;
+  --bs-border-color: #dde4e3;
+  --bs-focus-ring-color: rgba(61, 107, 99, .25);
+  --ac-primary-tint: #e3eeeb;
+  --ac-on-primary: #ffffff;
+  --ac-celery: #6aa84f;
 }
-:root[data-acelery-theme="acelery"] .btn-primary {
-  --bs-btn-bg: #586d72;
-  --bs-btn-border-color: #586d72;
-  --bs-btn-hover-bg: #4b5c60;
-  --bs-btn-hover-border-color: #465a5e;
-  --bs-btn-active-bg: #465a5e;
-  --bs-btn-active-border-color: #3f5054;
-  --bs-btn-disabled-bg: #586d72;
-  --bs-btn-disabled-border-color: #586d72;
+:root[data-acelery-theme="acelery"][data-bs-theme="dark"] {
+  --bs-primary: #7fc1b3;
+  --bs-primary-rgb: 127, 193, 179;
+  --bs-link-color: #7fc1b3;
+  --bs-link-color-rgb: 127, 193, 179;
+  --bs-link-hover-color: #a6d5cb;
+  --bs-link-hover-color-rgb: 166, 213, 203;
+  --bs-body-bg: #1a2224;
+  --bs-body-bg-rgb: 26, 34, 36;
+  --bs-body-color: #e6ecea;
+  --bs-body-color-rgb: 230, 236, 234;
+  --bs-secondary-color: #9aa8a6;
+  --bs-secondary-bg: #222c2e;
+  --bs-tertiary-bg: #111718;
+  --bs-border-color: #2f3b3d;
+  --bs-focus-ring-color: rgba(127, 193, 179, .3);
+  --ac-primary-tint: #24363a;
+  --ac-on-primary: #0d1f1b;
+  --ac-celery: #9ad17f;
 }
-:root[data-acelery-theme="acelery"] .btn-outline-primary {
-  --bs-btn-color: #586d72;
-  --bs-btn-border-color: #586d72;
-  --bs-btn-hover-bg: #586d72;
-  --bs-btn-hover-border-color: #586d72;
-  --bs-btn-active-bg: #586d72;
-  --bs-btn-active-border-color: #586d72;
-  --bs-btn-disabled-color: #586d72;
-  --bs-btn-disabled-border-color: #586d72;
+:where(:root[data-acelery-theme="acelery"]) .btn-primary {
+  --bs-btn-color: #ffffff;
+  --bs-btn-bg: #3d6b63;
+  --bs-btn-border-color: #3d6b63;
+  --bs-btn-hover-color: #ffffff;
+  --bs-btn-hover-bg: #345b54;
+  --bs-btn-hover-border-color: #315650;
+  --bs-btn-focus-shadow-rgb: 90, 129, 122;
+  --bs-btn-active-color: #ffffff;
+  --bs-btn-active-bg: #2f534d;
+  --bs-btn-active-border-color: #2c4e48;
+  --bs-btn-disabled-color: #ffffff;
+  --bs-btn-disabled-bg: #3d6b63;
+  --bs-btn-disabled-border-color: #3d6b63;
 }
-:root[data-acelery-theme="acelery"] .navbar-brand { color: #86a0a4; }
-:root[data-acelery-theme="acelery"] .form-control:focus,
-:root[data-acelery-theme="acelery"] .form-select:focus {
-  border-color: #86a0a4;
-  box-shadow: 0 0 0 .25rem rgba(88, 109, 114, .25);
+:where(:root[data-acelery-theme="acelery"][data-bs-theme="dark"]) .btn-primary {
+  --bs-btn-color: #0d1f1b;
+  --bs-btn-bg: #7fc1b3;
+  --bs-btn-border-color: #7fc1b3;
+  --bs-btn-hover-color: #0d1f1b;
+  --bs-btn-hover-bg: #93cbbf;
+  --bs-btn-hover-border-color: #93cbbf;
+  --bs-btn-focus-shadow-rgb: 127, 193, 179;
+  --bs-btn-active-color: #0d1f1b;
+  --bs-btn-active-bg: #a6d5cb;
+  --bs-btn-active-border-color: #a6d5cb;
+  --bs-btn-disabled-color: #0d1f1b;
+  --bs-btn-disabled-bg: #7fc1b3;
+  --bs-btn-disabled-border-color: #7fc1b3;
+}
+:where(:root[data-acelery-theme="acelery"]) .btn-outline-primary {
+  --bs-btn-color: var(--bs-primary);
+  --bs-btn-border-color: var(--bs-primary);
+  --bs-btn-hover-color: var(--ac-on-primary);
+  --bs-btn-hover-bg: var(--bs-primary);
+  --bs-btn-hover-border-color: var(--bs-primary);
+  --bs-btn-active-color: var(--ac-on-primary);
+  --bs-btn-active-bg: var(--bs-primary);
+  --bs-btn-active-border-color: var(--bs-primary);
+  --bs-btn-disabled-color: var(--bs-primary);
+  --bs-btn-disabled-border-color: var(--bs-primary);
+}
+/* Bootstrap compiles these to literal #0d6efd on the component, where a root
+   token cannot reach, so each is pointed back at the palette. */
+:where(:root[data-acelery-theme="acelery"]) .dropdown-menu {
+  --bs-dropdown-link-active-bg: var(--bs-primary);
+  --bs-dropdown-link-active-color: var(--ac-on-primary);
+}
+:where(:root[data-acelery-theme="acelery"]) .list-group {
+  --bs-list-group-active-bg: var(--bs-primary);
+  --bs-list-group-active-border-color: var(--bs-primary);
+  --bs-list-group-active-color: var(--ac-on-primary);
+}
+:where(:root[data-acelery-theme="acelery"]) .nav-pills {
+  --bs-nav-pills-link-active-bg: var(--bs-primary);
+  --bs-nav-pills-link-active-color: var(--ac-on-primary);
+}
+:where(:root[data-acelery-theme="acelery"]) .pagination {
+  --bs-pagination-active-bg: var(--bs-primary);
+  --bs-pagination-active-border-color: var(--bs-primary);
+  --bs-pagination-active-color: var(--ac-on-primary);
+}
+:where(:root[data-acelery-theme="acelery"]) .form-check-input:checked {
+  background-color: var(--bs-primary);
+  border-color: var(--bs-primary);
+}
+/* The navbar sets its own brand colour on .navbar, below the root, so the
+   token alone would not reach the brand. */
+:where(:root[data-acelery-theme="acelery"]) .navbar-brand,
+:where(:root[data-acelery-theme="acelery"]) .navbar-brand:hover {
+  color: var(--bs-primary);
+}
+:where(:root[data-acelery-theme="acelery"]) .form-control:focus,
+:where(:root[data-acelery-theme="acelery"]) .form-select:focus,
+:where(:root[data-acelery-theme="acelery"]) .form-check-input:focus {
+  border-color: rgba(var(--bs-primary-rgb), .6);
+  box-shadow: 0 0 0 .25rem rgba(var(--bs-primary-rgb), .25);
 }
 `;
 
@@ -125,7 +216,7 @@ const ACELERY = `
  */
 function rules(css) {
   const out = [];
-  let depth = 0, start = 0, quote = null;
+  let depth = 0, start = 0, quote = null, parens = 0;
   for (let i = 0; i < css.length; i++) {
     const c = css[i];
     if (quote) {
@@ -134,6 +225,25 @@ function rules(css) {
       continue;
     }
     if (c === '"' || c === "'") { quote = c; continue; }
+    /* A block-less statement — Bootswatch opens with `@import url(…fonts…);` —
+       ends at its semicolon. Without this it was glued to the front of the
+       rule after it, which is the theme's `:root` variable block, and the
+       webfont filter then dropped both: no theme carried its --bs-primary, so
+       anything reading the token rather than a component's literal colour
+       (the shell's whole palette, doc/shell-redesign.md §5.2) stayed stock
+       blue. */
+    /* Parentheses are tracked because that @import's URL is unquoted and
+       carries its own semicolon (`wght@400;700`). Splitting there left a
+       brace-less `700&display=swap);` in the delta, which the browser read as
+       the start of the next selector — invalidating the very :root block this
+       split exists to keep. */
+    if (c === "(") { parens++; continue; }
+    if (c === ")") { parens = Math.max(0, parens - 1); continue; }
+    if (c === ";" && depth === 0 && parens === 0) {
+      out.push(css.slice(start, i + 1));
+      start = i + 1;
+      continue;
+    }
     if (c === "{") depth++;
     else if (c === "}") {
       depth--;
@@ -219,6 +329,9 @@ function build(theme) {
   const delta = all.filter(
     (r) =>
       !stock.has(r) &&
+      // A statement with no block — @charset, @import — has nothing to scope,
+      // and a stray fragment would corrupt the rule after it.
+      r.includes("{") &&
       !r.startsWith("@charset") &&
       !/@font-face|@import|url\(/.test(r),
   );

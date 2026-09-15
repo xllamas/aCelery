@@ -46,7 +46,8 @@ export { TableMaint, useTableOptions } from "./table_maint.js";
 
    Same arrangement as the editor: a page pays for it only by asking. */
 export {
-  THEMES, applyTheme, currentTheme, isDark, ThemeSelect,
+  THEMES, MODES, applyTheme, currentTheme, currentMode, themeHasModes, isDark,
+  ThemeSelect,
 } from "./theme.js";
 
 /* react-bootstrap, re-exported so an app needs one import. Everything here is
@@ -65,8 +66,11 @@ export { default as NavDropdown } from "react-bootstrap/NavDropdown";
 export { default as Navbar } from "react-bootstrap/Navbar";
 export { default as Offcanvas } from "react-bootstrap/Offcanvas";
 export { default as Pagination } from "react-bootstrap/Pagination";
+export { default as Placeholder } from "react-bootstrap/Placeholder";
 export { default as ProgressBar } from "react-bootstrap/ProgressBar";
 export { default as Spinner } from "react-bootstrap/Spinner";
 export { default as Tab } from "react-bootstrap/Tab";
 export { default as Table } from "react-bootstrap/Table";
 export { default as Tabs } from "react-bootstrap/Tabs";
+export { default as Toast } from "react-bootstrap/Toast";
+export { default as ToastContainer } from "react-bootstrap/ToastContainer";

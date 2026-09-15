@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../acelery_runtime.dart';
@@ -11,7 +12,13 @@ import 'host_bridge.dart';
 import 'network_access_sheet.dart';
 import 'user_app_screen.dart';
 
-/// Replaces `ACeleryActivity`: the IDE, plus the options menu that sat on it.
+/// Replaces `ACeleryActivity`: the IDE.
+///
+/// The options menu that sat on it — Main, My Apps, Network access, Keep screen
+/// on, About, Website — has gone, along with the AppBar that carried it. The
+/// page draws its own navigation and a Settings screen, and asks the host for
+/// the things only the host can do (doc/shell-redesign.md §7). Two title bars
+/// and two overflow menus took about 112 px of a phone before any content.
 class IdeScreen extends StatefulWidget {
   const IdeScreen({super.key, required this.runtime});
 
@@ -21,12 +28,15 @@ class IdeScreen extends StatefulWidget {
   State<IdeScreen> createState() => _IdeScreenState();
 }
 
-enum _MenuAction { main, myApps, getIp, noSleep, about, website }
-
 class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
   final GlobalKey<ACeleryWebViewState> _webViewKey = GlobalKey();
   late final HostActions _actions = HostActions(widget.runtime);
-  bool _noSleep = false;
+
+  /// What the page reports for its top edge, painted behind the status bar and
+  /// the system navigation bar. White until the page says otherwise, which is
+  /// also the WebView's own background.
+  Color _chromeColor = Colors.white;
+  bool _chromeDark = false;
 
   ACeleryWebViewState? get _webView => _webViewKey.currentState;
 
@@ -82,9 +92,18 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
         await _importProject();
       case OpenExternalMessage():
         await showBusy(context, _actions.openExternal(Uri.parse(message.url)));
+      case ShowNetworkAccessMessage():
+        await _showNetworkAccess();
+      case SetKeepAwakeMessage(:final on):
+        await WakelockPlus.toggle(enable: on);
+      case SetChromeMessage(:final dark, :final color):
+        if (!mounted) return;
+        setState(() {
+          _chromeDark = dark;
+          if (color != null) _chromeColor = Color(color);
+        });
       case CloseAppMessage():
-        // The IDE itself has nowhere to close to; the original's Exit menu
-        // item is what leaves, and that is handled below.
+        // The IDE itself has nowhere to close to.
         break;
     }
   }
@@ -102,7 +121,8 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
         ),
       ),
     );
-    // The app may have created databases or files; let the IDE catch up.
+    // The app may have created databases or files; let the IDE catch up. The
+    // shell's route is in the URL, so the reload lands where you were.
     await _webView?.controller.reload();
   }
 
@@ -116,26 +136,6 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
       await _webView?.controller.reload();
     } on Exception catch (error) {
       messenger.showSnackBar(SnackBar(content: Text('Import failed: $error')));
-    }
-  }
-
-  Future<void> _onMenu(_MenuAction action) async {
-    switch (action) {
-      case _MenuAction.main:
-        await _webView?.controller.loadRequest(widget.runtime.ideUrl);
-      case _MenuAction.myApps:
-        await _webView?.controller.loadRequest(widget.runtime.myAppsUrl);
-      case _MenuAction.getIp:
-        await _showNetworkAccess();
-      case _MenuAction.noSleep:
-        await _toggleNoSleep();
-      case _MenuAction.about:
-        await _showAbout();
-      case _MenuAction.website:
-        await showBusy(
-          context,
-          _actions.openExternal(Uri.parse('http://www.acelery.com/')),
-        );
     }
   }
 
@@ -153,47 +153,19 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _toggleNoSleep() async {
-    final enable = !_noSleep;
-    await WakelockPlus.toggle(enable: enable);
-    if (!mounted) return;
-    setState(() => _noSleep = enable);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(enable ? 'Screen will stay on' : 'Screen may sleep'),
-      ),
-    );
-  }
-
-  Future<void> _showAbout() => _showMessage(
-        'aCelery',
-        'Build and run your own JavaScript apps.\n\n'
-        'Serving ${widget.runtime.server.baseUri}',
-      );
-
-  Future<void> _showMessage(String title, String body) {
-    return showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(body),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    // Light icons over a dark page, dark icons over a light one.
+    final overlay =
+        _chromeDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark;
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        // Back walks the page history first, exactly as the WebView did.
+        // Back walks the page history first, exactly as the WebView did. The
+        // shell pushes a history entry per level, so this steps out of the
+        // editor, then the project, then the list.
         await _webView?.forceSaveFile();
         final controller = _webView?.controller;
         if (controller != null && await controller.canGoBack()) {
@@ -202,35 +174,23 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
         }
         if (context.mounted) Navigator.of(context).maybePop();
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('aCelery'),
-          actions: [
-            PopupMenuButton<_MenuAction>(
-              onSelected: _onMenu,
-              itemBuilder: (context) => [
-                const PopupMenuItem(value: _MenuAction.main, child: Text('Main')),
-                const PopupMenuItem(
-                    value: _MenuAction.myApps, child: Text('My Apps')),
-                const PopupMenuItem(
-                    value: _MenuAction.getIp, child: Text('Network access')),
-                CheckedPopupMenuItem(
-                  value: _MenuAction.noSleep,
-                  checked: _noSleep,
-                  child: const Text('Keep screen on'),
-                ),
-                const PopupMenuItem(
-                    value: _MenuAction.about, child: Text('About')),
-                const PopupMenuItem(
-                    value: _MenuAction.website, child: Text('Website')),
-              ],
-            ),
-          ],
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: overlay.copyWith(
+          statusBarColor: Colors.transparent,
+          systemNavigationBarColor: _chromeColor,
         ),
-        body: ACeleryWebView(
-          key: _webViewKey,
-          initialUrl: widget.runtime.ideUrl,
-          onMessage: _onMessage,
+        child: Scaffold(
+          backgroundColor: _chromeColor,
+          // Both edges: the page pads for env(safe-area-inset-*) too, but a
+          // WebView is not guaranteed to report insets, and a bottom nav under
+          // the gesture bar is unusable.
+          body: SafeArea(
+            child: ACeleryWebView(
+              key: _webViewKey,
+              initialUrl: widget.runtime.ideUrl,
+              onMessage: _onMessage,
+            ),
+          ),
         ),
       ),
     );

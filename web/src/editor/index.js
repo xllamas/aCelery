@@ -180,6 +180,8 @@ function baseExtensions() {
  * @param {number|string} [options.width]
  * @param {number|string} [options.height]
  * @param {(value: string) => void} [options.onChange]
+ * @param {(value: string) => void} [options.onSave]  Mod-S; omit to leave the
+ *   key to the browser
  * @param {boolean} [options.readOnly]
  */
 export function createEditor(parent, options = {}) {
@@ -188,11 +190,25 @@ export function createEditor(parent, options = {}) {
   const size = new Compartment();
   const editable = new Compartment();
 
+  /* Ahead of the base keymaps, so it wins over anything they bind to Mod-S,
+     and preventDefault so a desktop browser does not open "Save page as". */
+  const saveKey = options.onSave
+    ? [keymap.of([{
+        key: "Mod-s",
+        preventDefault: true,
+        run: (v) => {
+          options.onSave(v.state.doc.toString());
+          return true;
+        },
+      }])]
+    : [];
+
   const view = new EditorView({
     parent,
     state: EditorState.create({
       doc: options.value ?? "",
       extensions: [
+        ...saveKey,
         ...baseExtensions(),
         language.of(languageFor(options.filename)),
         theme.of(THEMES[options.theme] ?? THEMES.light),

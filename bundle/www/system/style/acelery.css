@@ -1,18 +1,1392 @@
-/* The system shell's own styles.
+/* The system shell's own styles (doc/shell-redesign.md §5).
 
-   The Bootstrap-3-era rules that used to live here propped up xbLayout's
-   HTML-table layout and a navbar that no longer exists. What is left is the
-   one thing Bootstrap has no class for: an editor that fills the space below
-   the navbar. */
+   Only system/index.html loads this. User apps, launcher.html and the Example
+   app are styled by /tools/css/acelery.css and never see any of it.
 
-.acelery-editor {
-  /* The navbar is the only thing above it, and its height varies with whether
-     the collapse is open, so this is a floor rather than an exact fit. */
-  height: calc(100vh - 8rem);
-  min-height: 20rem;
+   Every colour here is a token, and every token defaults to one of Bootstrap's
+   own, so all 18 themes still tint the shell. The aCelery theme overrides a
+   few of them with its measured palette (tool/build_themes.mjs). A `:root`
+   rule here scores (0,1,0) and a theme's `:root[data-acelery-theme]` (0,2,0),
+   so a theme always wins whatever order the sheets load in. */
+
+:root {
+  --ac-bg: var(--bs-tertiary-bg);
+  --ac-surface: var(--bs-body-bg);
+  --ac-surface-2: var(--bs-secondary-bg);
+  --ac-text: var(--bs-body-color);
+  --ac-muted: var(--bs-secondary-color);
+  --ac-border: var(--bs-border-color);
+  --ac-primary: var(--bs-primary);
+  --ac-primary-rgb: var(--bs-primary-rgb);
+  --ac-primary-tint: rgba(var(--bs-primary-rgb), .14);
+  --ac-on-primary: #ffffff;
+  --ac-celery: var(--bs-success);
+
+  --ac-radius: 12px;
+  --ac-radius-lg: 16px;
+  --ac-shadow: 0 8px 24px rgba(0, 0, 0, .14), 0 2px 6px rgba(0, 0, 0, .08);
+  --ac-ease: cubic-bezier(.2, 0, 0, 1);
+
+  --ac-appbar-h: 56px;
+  --ac-nav-h: 64px;
+  --ac-rail-w: 88px;
+  --ac-sidebar-w: 248px;
+
+  /* Rounder than stock, for the controls Bootstrap draws inside the shell. A
+     Bootswatch theme that sets its own radius still wins, at (0,2,0). */
+  --bs-border-radius: .625rem;
+  --bs-border-radius-lg: 1rem;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--ac-bg);
+  color: var(--ac-text);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+.ac-frame :focus-visible {
+  outline: 2px solid var(--ac-primary);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ frame */
+
+/* A flex column the height of the viewport. Only the content row scrolls, which
+   is what lets the editor and the SQL results fill exactly the space left. */
+.ac-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
-.acelery-editor .cm-editor {
+.ac-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ac-screen {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  animation: ac-fade 150ms var(--ac-ease);
+}
+
+@keyframes ac-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---------------------------------------------------------------- app bar */
+
+.ac-appbar {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--ac-appbar-h);
+  padding: 0 4px;
+  background: var(--ac-surface);
+  border-bottom: 1px solid transparent;
+  transition: border-color 150ms;
+}
+
+.ac-appbar.is-scrolled,
+.ac-appbar.has-subbar {
+  border-bottom-color: var(--ac-border);
+}
+
+.ac-appbar-titles {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.ac-appbar.no-back .ac-appbar-titles {
+  padding-left: 12px;
+}
+
+.ac-appbar-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ac-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ac-appbar-subtitle {
+  font-size: .8125rem;
+  color: var(--ac-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ac-appbar-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ac-subbar {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  background: var(--ac-surface);
+  border-bottom: 1px solid var(--ac-border);
+}
+
+.ac-brand-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ------------------------------------------------------------ icon button */
+
+/* 44 px, the touch target floor (§5.7), whatever size the glyph is. */
+.ac-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ac-text);
+  font-size: 1.125rem;
+  transition: background-color 100ms;
+}
+
+.ac-iconbtn:hover {
+  background: var(--ac-surface-2);
+}
+
+.ac-iconbtn:active {
+  background: var(--ac-primary-tint);
+}
+
+.ac-iconbtn:disabled {
+  color: var(--ac-muted);
+  opacity: .45;
+  background: transparent;
+}
+
+.ac-iconbtn.is-primary {
+  color: var(--ac-primary);
+}
+
+/* ------------------------------------------------------------- navigation */
+
+.ac-bottomnav {
+  flex: 0 0 auto;
+  display: flex;
+  background: var(--ac-surface);
+  border-top: 1px solid var(--ac-border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.ac-navitem {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: var(--ac-nav-h);
+  color: var(--ac-muted);
+  font-size: .75rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.ac-navitem:hover {
+  color: var(--ac-text);
+}
+
+.ac-navicon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 32px;
+  border-radius: 16px;
+  font-size: 1.125rem;
+  transition: background-color 150ms var(--ac-ease);
+}
+
+/* The active item changes colour *and* gains a pill, so the state is never
+   carried by colour alone (§5.7). */
+.ac-navitem[aria-current="page"] {
+  color: var(--ac-primary);
+  font-weight: 600;
+}
+
+.ac-navitem[aria-current="page"] .ac-navicon {
+  background: var(--ac-primary-tint);
+}
+
+.ac-rail {
+  display: none;
+}
+
+.ac-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 4px 0 16px;
+}
+
+.ac-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--ac-primary);
+  color: var(--ac-on-primary);
+  font-size: 1.125rem;
+}
+
+.ac-brand-name {
+  display: none;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--ac-text);
+}
+
+/* The keyboard takes half a phone screen while the editor is focused; the nav
+   gives its row back until the editor lets go (§4.1). */
+@media (max-width: 767.98px) {
+  .ac-frame:has(.cm-editor.cm-focused) .ac-bottomnav,
+  .ac-frame:has(.ac-sql-input:focus) .ac-bottomnav {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .ac-frame {
+    flex-direction: row;
+  }
+
+  .ac-bottomnav {
+    display: none;
+  }
+
+  .ac-rail {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 var(--ac-rail-w);
+    gap: 4px;
+    padding: 16px 0 calc(16px + env(safe-area-inset-bottom));
+    background: var(--ac-surface);
+    border-right: 1px solid var(--ac-border);
+    overflow-y: auto;
+  }
+
+  .ac-rail .ac-navitem {
+    flex: 0 0 auto;
+    min-height: 64px;
+  }
+
+  .ac-rail .ac-navitem.is-settings {
+    margin-top: auto;
+  }
+}
+
+@media (min-width: 1200px) {
+  .ac-frame {
+    --ac-rail-w: 232px;
+  }
+
+  .ac-rail {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .ac-brand {
+    justify-content: flex-start;
+    padding: 4px 8px 20px;
+  }
+
+  .ac-brand-name {
+    display: inline;
+  }
+
+  .ac-rail .ac-navitem {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 8px;
+    min-height: 48px;
+    padding-right: 16px;
+    border-radius: 24px;
+    font-size: .9375rem;
+  }
+
+  .ac-rail .ac-navicon {
+    width: 44px;
+    height: 40px;
+  }
+
+  .ac-rail .ac-navitem[aria-current="page"] {
+    background: var(--ac-primary-tint);
+  }
+
+  .ac-rail .ac-navitem[aria-current="page"] .ac-navicon {
+    background: transparent;
+  }
+}
+
+/* ---------------------------------------------------------------- content */
+
+.ac-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 16px 24px;
+}
+
+.ac-content.has-fab {
+  padding-bottom: 96px;
+}
+
+.ac-content.is-fill {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.ac-content-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+@media (min-width: 768px) {
+  .ac-content {
+    padding: 24px 24px 32px;
+  }
+
+  .ac-content.has-fab {
+    padding-bottom: 104px;
+  }
+}
+
+.ac-section-title {
+  margin: 8px 4px 10px;
+  font-size: .8125rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--ac-muted);
+}
+
+.ac-section + .ac-section {
+  margin-top: 24px;
+}
+
+.ac-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.ac-search {
+  position: relative;
+  flex: 1 1 16rem;
+  max-width: 28rem;
+}
+
+.ac-search i {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  transform: translateY(-50%);
+  color: var(--ac-muted);
+  pointer-events: none;
+}
+
+.ac-search input {
+  padding-left: 40px;
+  border-radius: 22px;
+  min-height: 44px;
+}
+
+/* -------------------------------------------------------------------- FAB */
+
+.ac-fab {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 28px;
+  background: var(--ac-primary);
+  color: var(--ac-on-primary);
+  font-weight: 600;
+  box-shadow: var(--ac-shadow);
+  transition: transform 100ms, box-shadow 150ms;
+}
+
+.ac-fab i {
+  font-size: 1.25rem;
+}
+
+.ac-fab:active {
+  transform: scale(.96);
+}
+
+.ac-fab-label {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .ac-fab {
+    right: 24px;
+    bottom: 24px;
+    width: auto;
+    padding: 0 22px 0 18px;
+  }
+
+  .ac-fab-label {
+    display: inline;
+  }
+}
+
+/* ---------------------------------------------------------- cards and rows */
+
+.ac-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+}
+
+@media (min-width: 768px) {
+  .ac-grid {
+    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  }
+}
+
+.ac-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+  transition: border-color 100ms, box-shadow 150ms;
+}
+
+.ac-card:hover {
+  border-color: rgba(var(--ac-primary-rgb), .5);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .06);
+}
+
+.ac-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-right: -8px;
+  margin-top: -4px;
+}
+
+.ac-card-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ac-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ac-card-text {
+  display: -webkit-box;
+  margin: 0;
+  font-size: .875rem;
+  color: var(--ac-muted);
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The whole card or row is one hit area, drawn by the title button's ::after,
+   so there are no interactive elements nested inside other ones. Anything
+   that needs its own tap — the overflow menu — sits above it. */
+.ac-stretch {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ac-stretch::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.ac-stretch:focus-visible {
+  outline: none;
+}
+
+.ac-card:has(.ac-stretch:focus-visible),
+.ac-row:has(.ac-stretch:focus-visible) {
+  outline: 2px solid var(--ac-primary);
+  outline-offset: -2px;
+}
+
+.ac-over {
+  position: relative;
+  z-index: 1;
+}
+
+.ac-tile {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  border-radius: 12px;
+  color: #ffffff;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.ac-tile img {
+  width: 100%;
   height: 100%;
+  object-fit: cover;
+}
+
+.ac-list {
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+}
+
+.ac-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 10px 16px;
+}
+
+.ac-row:has(> .ac-over) {
+  padding-right: 4px;
+}
+
+.ac-row + .ac-row {
+  border-top: 1px solid var(--ac-border);
+}
+
+.ac-list > .ac-row:first-child {
+  border-radius: var(--ac-radius) var(--ac-radius) 0 0;
+}
+
+.ac-list > .ac-row:last-child {
+  border-radius: 0 0 var(--ac-radius) var(--ac-radius);
+}
+
+.ac-list > .ac-row:only-child {
+  border-radius: var(--ac-radius);
+}
+
+.ac-row.is-action:hover {
+  background: var(--ac-surface-2);
+}
+
+.ac-row.is-selected,
+.ac-row.is-selected:hover {
+  background: var(--ac-primary-tint);
+}
+
+.ac-row.is-selected .ac-row-title {
+  color: var(--ac-primary);
+  font-weight: 600;
+}
+
+.ac-row-icon {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--ac-surface-2);
+  color: var(--ac-muted);
+}
+
+.ac-row-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ac-row-title {
+  font-weight: 500;
+  color: var(--ac-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ac-row-meta {
+  font-size: .8125rem;
+  color: var(--ac-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ac-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--ac-primary-tint);
+  color: var(--ac-primary);
+  font-size: .75rem;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------- empty and loading */
+
+.ac-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 28rem;
+  margin: 0 auto;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.ac-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 8px;
+  border-radius: 20px;
+  background: var(--ac-primary-tint);
+  color: var(--ac-primary);
+  font-size: 1.625rem;
+}
+
+.ac-empty h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.ac-empty p {
+  margin: 0 0 8px;
+  color: var(--ac-muted);
+}
+
+.ac-skeleton .placeholder {
+  border-radius: 6px;
+}
+
+.ac-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: var(--ac-radius);
+}
+
+/* ---------------------------------------------------------------- buttons */
+
+.ac-frame .btn,
+.modal .btn {
+  min-height: 40px;
+  font-weight: 500;
+}
+
+.ac-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ac-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--ac-border);
+  border-radius: 18px;
+  background: var(--ac-surface);
+  color: var(--ac-text);
+  font-size: .875rem;
+  font-weight: 500;
+}
+
+.ac-chip:hover {
+  background: var(--ac-surface-2);
+}
+
+.ac-segmented {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--ac-surface-2);
+}
+
+.ac-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 16px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ac-muted);
+  font-size: .9375rem;
+  font-weight: 500;
+}
+
+.ac-segment[aria-selected="true"],
+.ac-segment[aria-checked="true"] {
+  background: var(--ac-surface);
+  color: var(--ac-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .14);
+}
+
+.ac-segment:disabled {
+  opacity: .5;
+}
+
+/* ---------------------------------------------------- menus, sheets, toasts */
+
+.ac-frame .dropdown-menu {
+  padding: 6px;
+  border-color: var(--ac-border);
+  border-radius: var(--ac-radius);
+  box-shadow: var(--ac-shadow);
+}
+
+.ac-frame .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  border-radius: 8px;
+}
+
+.ac-frame .dropdown-item i {
+  width: 18px;
+  text-align: center;
+  color: var(--ac-muted);
+}
+
+.ac-frame .dropdown-item.is-danger,
+.ac-frame .dropdown-item.is-danger i {
+  color: var(--bs-danger-text-emphasis);
+}
+
+.modal-content {
+  border: 0;
+  border-radius: var(--ac-radius-lg);
+}
+
+.ac-sheet-title {
+  padding: 16px 20px 8px;
+  font-weight: 600;
+  color: var(--ac-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ac-actions {
+  padding: 4px 0 12px;
+}
+
+.ac-action {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 20px;
+  border: 0;
+  background: transparent;
+  color: var(--ac-text);
+  font-size: 1rem;
+  text-align: left;
+}
+
+.ac-action:hover,
+.ac-action:active {
+  background: var(--ac-surface-2);
+}
+
+.ac-action i {
+  width: 20px;
+  text-align: center;
+  color: var(--ac-muted);
+}
+
+.ac-action.is-danger,
+.ac-action.is-danger i {
+  color: var(--bs-danger-text-emphasis);
+}
+
+.ac-action:disabled {
+  opacity: .45;
+}
+
+/* Below 768 px a dialog is a bottom sheet: pinned to the bottom edge, full
+   width, rising rather than dropping in. Same Modal, same focus handling. */
+@media (max-width: 767.98px) {
+  .modal-dialog.ac-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: none;
+    min-height: 0;
+    margin: 0;
+    display: block;
+  }
+
+  .modal.fade .modal-dialog.ac-sheet {
+    transform: translateY(100%);
+    transition: transform 220ms var(--ac-ease);
+  }
+
+  .modal.show .modal-dialog.ac-sheet {
+    transform: none;
+  }
+
+  .ac-sheet .modal-content {
+    max-height: 90vh;
+    max-height: 90dvh;
+    overflow-y: auto;
+    border-radius: var(--ac-radius-lg) var(--ac-radius-lg) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .ac-sheet .modal-content::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 36px;
+    height: 4px;
+    margin: 8px auto 0;
+    border-radius: 2px;
+    background: var(--ac-border);
+  }
+}
+
+.ac-toasts {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--ac-nav-h) + 16px + env(safe-area-inset-bottom));
+  z-index: 1090;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+@media (min-width: 768px) {
+  .ac-toasts {
+    bottom: 24px;
+  }
+}
+
+/* An inverted snackbar: the page's text colour as the ground. */
+.ac-toast {
+  width: auto;
+  max-width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: var(--ac-text);
+  color: var(--ac-surface);
+  box-shadow: var(--ac-shadow);
+  pointer-events: auto;
+}
+
+.ac-toast .toast-body {
+  padding: 12px 4px 12px 16px;
+}
+
+.ac-toast .ac-iconbtn {
+  color: inherit;
+}
+
+.ac-toast .ac-iconbtn:hover {
+  background: transparent;
+}
+
+/* ------------------------------------------------------------------- home */
+
+.ac-home {
+  display: grid;
+  gap: 24px;
+}
+
+@media (min-width: 992px) {
+  .ac-home {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: start;
+  }
+}
+
+.ac-hero {
+  margin: 0 4px 4px;
+}
+
+.ac-hero h2 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+.ac-hero p {
+  margin: 4px 0 0;
+  color: var(--ac-muted);
+}
+
+.ac-continue {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ac-continue-card {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius-lg);
+}
+
+.ac-continue-card .ac-row-body {
+  flex: 1 1 10rem;
+}
+
+.ac-quick {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ac-quick-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+  background: var(--ac-surface);
+  color: var(--ac-text);
+  font-weight: 600;
+  text-align: left;
+  transition: border-color 100ms;
+}
+
+.ac-quick-btn:hover {
+  border-color: rgba(var(--ac-primary-rgb), .5);
+}
+
+.ac-quick-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--ac-primary-tint);
+  color: var(--ac-primary);
+}
+
+.ac-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ac-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+  background: var(--ac-surface);
+  color: var(--ac-text);
+  text-align: left;
+  text-decoration: none;
+}
+
+.ac-stat:hover {
+  border-color: rgba(var(--ac-primary-rgb), .5);
+  color: var(--ac-text);
+}
+
+.ac-stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ac-stat-label {
+  font-size: .875rem;
+  color: var(--ac-muted);
+}
+
+/* The one place the celery accent appears: a decorative stripe, never text
+   and never a state (§5.1). */
+.ac-welcome {
+  position: relative;
+  overflow: hidden;
+  padding: 20px 20px 20px 24px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius-lg);
+}
+
+.ac-welcome::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  background: var(--ac-celery);
+}
+
+.ac-welcome h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.ac-welcome p {
+  color: var(--ac-muted);
+}
+
+/* --------------------------------------------------------------- settings */
+
+.ac-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  min-height: 60px;
+  padding: 12px 16px;
+}
+
+.ac-setting + .ac-setting {
+  border-top: 1px solid var(--ac-border);
+}
+
+.ac-setting-label {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.ac-setting-label label,
+.ac-setting-label .ac-setting-name {
+  display: block;
+  margin: 0;
+  font-weight: 500;
+}
+
+.ac-setting-help {
+  font-size: .8125rem;
+  color: var(--ac-muted);
+}
+
+.ac-setting .form-select {
+  flex: 0 1 14rem;
+  min-height: 40px;
+}
+
+.ac-setting .form-switch .form-check-input {
+  width: 2.75em;
+  height: 1.5em;
+}
+
+/* ------------------------------------------------------------ code editor */
+
+.ac-split {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+.ac-sidebar {
+  flex: 0 0 var(--ac-sidebar-w);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--ac-surface);
+  border-right: 1px solid var(--ac-border);
+}
+
+.ac-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px 4px 16px;
+}
+
+.ac-sidebar .ac-section-title {
+  margin: 0;
+}
+
+.ac-sidebar .ac-list {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.ac-sidebar .ac-row {
+  min-height: 44px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  border-radius: 0;
+}
+
+.ac-sidebar .ac-row + .ac-row {
+  border-top: 0;
+}
+
+.ac-sidebar .ac-row-icon {
+  width: 30px;
+  height: 30px;
+  background: transparent;
+}
+
+.ac-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ac-surface);
+}
+
+.ac-pane > .ac-empty {
+  margin: auto;
+}
+
+.ac-pane > .ac-error {
+  margin: 12px 12px 0;
+}
+
+/* CodeMirror sizes to its box, so the box needs an exact size. The host is the
+   flex item; the mount inside it is absolutely positioned, which gives the
+   editor a definite height to be 100% of.
+
+   The editor element itself cannot be the positioned one: CodeMirror's base
+   theme sets `position: relative !important` on .cm-editor. Positioning it
+   absolutely lost to that, left `inset` inert, and let the editor grow to the
+   height of the whole file — 11,991 px of example.js in a 673 px host — so its
+   scroller never overflowed and the row around it clipped instead of
+   scrolling. Reported on a phone; measured on the emulator over DevTools. */
+.ac-editor-host {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.ac-editor-mount {
+  position: absolute;
+  inset: 0;
+}
+
+.ac-editor-mount .cm-editor {
+  height: 100%;
+}
+
+.ac-status {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+  padding: 0 12px;
+  background: var(--ac-surface);
+  border-top: 1px solid var(--ac-border);
+  color: var(--ac-muted);
+  font-size: .75rem;
+}
+
+.ac-dirty {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: var(--ac-primary);
+  vertical-align: middle;
+}
+
+.ac-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--ac-bg);
+}
+
+.ac-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  background: repeating-conic-gradient(#d9dede 0 25%, #ffffff 0 50%) 50% / 16px 16px;
+}
+
+/* ------------------------------------------------------------------- data */
+
+.ac-sql {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ac-sql-input {
+  min-height: 7.5rem;
+  resize: vertical;
+  border-radius: var(--ac-radius);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .9375rem;
+}
+
+.ac-results-meta {
+  font-size: .8125rem;
+  color: var(--ac-muted);
+}
+
+.ac-results {
+  max-height: 60vh;
+  max-height: 60dvh;
+  overflow: auto;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+}
+
+.ac-results .table {
+  margin: 0;
+  font-size: .875rem;
+}
+
+.ac-results thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  --bs-table-bg: var(--ac-surface-2);
+  white-space: nowrap;
+}
+
+.ac-results td {
+  max-width: 24rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ac-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ac-null {
+  color: var(--ac-muted);
+  font-size: .8125rem;
+  font-style: italic;
+}
+
+.ac-content .card {
+  border-color: var(--ac-border);
+  border-radius: var(--ac-radius);
+}
+
+.ac-columns-menu {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 8px 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ac-frame *,
+  .ac-screen,
+  .modal,
+  .modal-dialog,
+  .ac-toast {
+    animation: none !important;
+    transition: none !important;
+  }
 }

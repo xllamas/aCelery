@@ -63,6 +63,12 @@ class _UserAppScreenState extends State<UserAppScreen> {
       case OpenExternalMessage():
         await showBusy(context, _actions.openExternal(Uri.parse(message.url)));
       case ImportProjectMessage():
+      // The system shell's Settings messages. A user app has no business
+      // opening the network sheet or holding a wakelock, so they do nothing
+      // here even though the channel will carry them.
+      case ShowNetworkAccessMessage():
+      case SetKeepAwakeMessage():
+      case SetChromeMessage():
         break;
     }
   }

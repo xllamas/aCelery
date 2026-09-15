@@ -20,9 +20,49 @@ sealed class HostMessage {
       'closeApp' => const CloseAppMessage(),
       'download' => DownloadMessage(url: json['url'] as String? ?? ''),
       'importProject' => const ImportProjectMessage(),
+      'showNetworkAccess' => const ShowNetworkAccessMessage(),
+      'setKeepAwake' => SetKeepAwakeMessage(on: json['on'] == true),
+      'setChrome' => SetChromeMessage(
+          dark: json['dark'] == true,
+          color: parseHexColor(json['color']),
+        ),
       _ => null,
     };
   }
+}
+
+/// `#rrggbb` → an opaque ARGB value; null for anything else, including the
+/// shorthand and alpha forms, which the page never sends.
+int? parseHexColor(Object? value) {
+  if (value is! String) return null;
+  final match = RegExp(r'^#([0-9a-fA-F]{6})$').firstMatch(value);
+  if (match == null) return null;
+  return 0xFF000000 | int.parse(match.group(1)!, radix: 16);
+}
+
+/// Settings → Network access: open the sheet that decides which devices on
+/// the network may reach the server.
+class ShowNetworkAccessMessage extends HostMessage {
+  const ShowNetworkAccessMessage();
+}
+
+/// Settings → Keep screen on.
+class SetKeepAwakeMessage extends HostMessage {
+  const SetKeepAwakeMessage({required this.on});
+
+  final bool on;
+}
+
+/// The colour at the top of the page and whether it is dark, so the status
+/// bar above it can match. The host owns that bar; `theme-color` does not
+/// reach it (doc/shell-redesign.md §7).
+class SetChromeMessage extends HostMessage {
+  const SetChromeMessage({required this.dark, this.color});
+
+  final bool dark;
+
+  /// Opaque ARGB, or null if the page could not measure one.
+  final int? color;
 }
 
 /// `xRunUserApp` — open one of the user's apps.

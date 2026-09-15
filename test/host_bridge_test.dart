@@ -31,6 +31,38 @@ void main() {
           isA<DownloadMessage>());
     });
 
+    test("the shell's settings messages parse", () {
+      // doc/shell-redesign.md §7: the rows that moved from the host's options
+      // menu into the page's Settings screen.
+      expect(HostMessage.parse('{"action":"showNetworkAccess"}'),
+          isA<ShowNetworkAccessMessage>());
+
+      final awake = HostMessage.parse('{"action":"setKeepAwake","on":true}')
+          as SetKeepAwakeMessage;
+      expect(awake.on, isTrue);
+      final unset =
+          HostMessage.parse('{"action":"setKeepAwake"}') as SetKeepAwakeMessage;
+      expect(unset.on, isFalse, reason: 'anything but true is off');
+
+      final chrome = HostMessage.parse(
+              '{"action":"setChrome","dark":true,"color":"#1a2224"}')
+          as SetChromeMessage;
+      expect(chrome.dark, isTrue);
+      expect(chrome.color, 0xFF1A2224);
+    });
+
+    test('a chrome colour that is not #rrggbb is ignored', () {
+      // The channel is reachable from any script, so the colour is parsed
+      // strictly rather than handed to Color() as whatever arrived.
+      for (final bad in ['"red"', '"#fff"', '"#1a2224ff"', '42', 'null']) {
+        final chrome =
+            HostMessage.parse('{"action":"setChrome","color":$bad}')
+                as SetChromeMessage;
+        expect(chrome.color, isNull, reason: bad);
+        expect(chrome.dark, isFalse);
+      }
+    });
+
     test('malformed input is dropped rather than thrown', () {
       // The channel is reachable from any script the user writes.
       expect(HostMessage.parse('not json'), isNull);

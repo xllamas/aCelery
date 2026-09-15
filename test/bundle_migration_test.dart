@@ -358,9 +358,22 @@ void main() {
       // to --bs-btn-bg:#0d6efd, a literal, so overriding --bs-primary alone
       // leaves the Save button stock blue. Verified on device.
       final css = File('${themeDir.path}/acelery.css').readAsStringSync();
-      expect(css, contains('--bs-primary: #586d72'));
+      expect(css, contains('--bs-primary: #3d6b63'));
       expect(css, contains('.btn-primary'));
-      expect(css, contains('--bs-btn-bg: #586d72'));
+      expect(css, contains('--bs-btn-bg: #3d6b63'));
+    });
+
+    test('the aCelery theme has a dark mode of its own', () {
+      // doc/shell-redesign.md §5.1-5.2. Bootstrap's .btn-primary hard-codes
+      // white text, which fails on the light dark-mode primary, so the dark
+      // rules must set the button's text colour as well as its background.
+      final css = File('${themeDir.path}/acelery.css').readAsStringSync();
+      final dark = css.substring(css.indexOf(
+          ':where(:root[data-acelery-theme="acelery"][data-bs-theme="dark"]) .btn-primary'));
+      expect(dark, contains('--bs-btn-bg: #7fc1b3'));
+      expect(dark, contains('--bs-btn-color: #0d1f1b'));
+      // The old brand colour measured 2.63:1 against the navbar it sat on.
+      expect(css, isNot(contains('#86a0a4')));
     });
 
     test('switching a theme swaps a delta, not a whole stylesheet', () {
@@ -709,7 +722,9 @@ void main() {
       final decoded = jsonDecode(manifest) as Map<String, Object?>;
       expect(decoded['entry'], 'example.js');
 
-      final ide = File('web/src/ide/ide_screen.js').readAsStringSync();
+      // The scaffold moved to the shell's store when the IDE became the Code
+      // destination (doc/shell-redesign.md §6.1).
+      final ide = File('web/src/ide/store.js').readAsStringSync();
       expect(ide, contains('entry: "main.js"'),
           reason: 'new projects must get an entry field');
       expect(ide, contains('export default function main'),
@@ -782,7 +797,7 @@ void main() {
     test('the IDE drives the editor through the small API it always used', () {
       // CM4 gave the IDE five things. Keeping the same five is what lets the
       // editor migration and the IDE rewrite stay separate pieces of work.
-      final ide = File('web/src/ide/ide_screen.js').readAsStringSync();
+      final ide = File('web/src/ide/code_workspace.js').readAsStringSync();
       for (final call in [
         'createEditor(',
         '.getValue()',
@@ -970,6 +985,16 @@ void main() {
       expect(info['preactCores'], 1);
     });
 
+    test('the system shell stays within the budget its redesign set', () {
+      // doc/shell-redesign.md §6.6: five destinations and a frame, no new
+      // dependency, under 18 KB gzipped. A big jump here means something was
+      // bundled into ide.js that should have stayed external.
+      final shell = File('${acelery.path}/ide.js');
+      final gzipped = gzip.encode(shell.readAsBytesSync()).length;
+      expect(gzipped, lessThan(18 * 1024),
+          reason: '$gzipped bytes gzipped — §6.6 budgets 18 KB');
+    });
+
     test('the chart bundle stays within the budget §3.8 measured', () {
       final chart = File('${acelery.path}/chart.js');
       expect(chart.lengthSync(), lessThan(260 * 1024),
@@ -1013,11 +1038,12 @@ void main() {
       expect(text.indexOf('position: absolute'), greaterThan(media!.start));
     });
 
-    test('both navbars can be dismissed without choosing anything', () {
+    test('the Example app navbar can be dismissed without choosing anything', () {
       // An inline menu left open is in the way; an overlaid one hides what is
-      // under it, so tapping outside has to close it.
+      // under it, so tapping outside has to close it. The system shell has no
+      // collapsing navbar any more (doc/shell-redesign.md §9): its menus and
+      // sheets are react-bootstrap's own, which dismiss themselves.
       for (final source in [
-        'web/src/ide/chrome.js',
         'bundle/www/user/Example/example.js',
       ]) {
         expect(File(source).readAsStringSync(), contains('useDismiss'),
@@ -1027,6 +1053,33 @@ void main() {
       expect(dismiss, contains('pointerdown'));
       expect(dismiss, contains('Escape'),
           reason: 'aCelery also runs in a desktop browser over the LAN');
+    });
+  });
+
+  group('the editor fills its pane and scrolls inside it', () {
+    test('CodeMirror mounts in a positioned box and is not positioned itself',
+        () {
+      // CodeMirror's base theme sets `position: relative !important` on
+      // .cm-editor. The redesign first positioned the editor absolutely; that
+      // lost, the editor grew to the height of the whole file, and nothing in
+      // the IDE could scroll — reported on a physical phone, measured on the
+      // emulator at 11,991 px of editor in a 673 px pane. jsdom has no layout,
+      // so this pins the arrangement in the source instead.
+      final css =
+          File('bundle/www/system/style/acelery.css').readAsStringSync();
+      final mount = RegExp(r'\.ac-editor-mount\s*\{([^}]*)\}').firstMatch(css);
+      expect(mount, isNotNull, reason: 'the editor needs a positioned mount');
+      expect(mount!.group(1), contains('position: absolute'));
+
+      for (final rule in RegExp(r'\.cm-editor\s*\{([^}]*)\}').allMatches(css)) {
+        expect(rule.group(1), isNot(contains('position')),
+            reason: "any position on .cm-editor loses to CodeMirror's "
+                '!important');
+      }
+
+      expect(File('web/src/ide/code_workspace.js').readAsStringSync(),
+          contains(r'class="ac-editor-mount" ref=${host}'),
+          reason: 'CodeMirror must be created inside the mount');
     });
   });
 
