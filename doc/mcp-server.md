@@ -43,7 +43,7 @@ Verified against Anthropic's documentation on 2026-09-15.
 | Claude Code | `claude mcp add --transport http aCelery http://<phone>:8123/mcp --header "Authorization: Bearer <token>"` | Yes, directly |
 | Editors and harnesses that dial out from the machine | the same URL | Expected; untested |
 | A browser-based tool on the same LAN | the same URL, plus the Origin rule in §3 | Yes |
-| Claude Desktop | its config accepts only local programs, so `npx mcp-remote http://<phone>:8123/mcp` | Yes, through that bridge |
+| Claude Desktop | its config accepts only local programs, so `npx -y mcp-remote http://<phone>:8123/mcp --allow-http --transport http-only --header Authorization:${AUTH_HEADER}`, with the key in `env` (§16) | Yes, through that bridge; verified with `mcp-remote` 0.14.2 |
 | claude.ai, Claude mobile, Cowork | connectors originate in Anthropic's cloud and need a public address | **No** |
 
 Anthropic's help article states it directly: "Claude connects to your remote MCP
@@ -185,7 +185,8 @@ without new instrumentation.
 - **P6. Availability.** The server dies with the app. On Android a foreground
   service would keep a session alive while the screen is off (M4); on iOS it
   cannot, so an MCP session lasts only while aCelery is on screen. That is the
-  background-serving question, unchanged.
+  background-serving question, unchanged. *Android part done in M2, after a
+  physical phone froze the app on screen off (§17).*
 
 ## 8. Phasing
 
@@ -193,10 +194,12 @@ without new instrumentation.
   *Done, 2026-09-16 (§15). M1 also took P5 and the token half of P2.*
   Usable from Claude Code over `adb forward`, with a token.
 - **M2 — the network.** P2, the Network access UI, and the documented
-  `mcp-remote` line for Claude Desktop.
+  `mcp-remote` line for Claude Desktop. *Done, 2026-09-16 (§16), except a
+  real phone.*
 - **M3 — run and debug.** P3, P4, and the run tools. The screenshot spike
   (§13.4) is decided here.
-- **M4 — optional.** The Android foreground service, the generated API
+- **M4 — optional.** ~~The Android foreground service~~ (moved into M2,
+  §17), the generated API
   reference, the IDE's "changed outside the editor" guard, and the revived
   error log.
 
@@ -261,9 +264,25 @@ without new instrumentation.
    WKWebView's own `takeSnapshot` is not surfaced. *Recommended: a timeboxed
    spike in M3; ship `dom` meanwhile.*
 5. **Scaffold as bundle templates** (P5). *Recommended: yes.*
-6. **Android foreground service.** *Recommended: defer to M4.*
+6. **Android foreground service.** *Decided 2026-09-16: a `connectedDevice`
+   foreground service runs exactly while sharing is on (§17).*
 7. **Claude Desktop.** *Recommended: document the `mcp-remote` line; write no
    bridge of our own.*
+8. **Protocol revision `2026-07-28`.** It is stateless: no `initialize`, no
+   sessions, the version sent with every request, `server/discover`, and the
+   `Mcp-Method` and `Mcp-Name` headers. aCelery implements `2025-03-26` to
+   `2025-11-25`, which the specification calls legacy.
+   - **Dual-era clients** still connect. A client that speaks both revisions
+     tries a new-style request first, and gets 400 with `-32600` because there
+     is no session. That is not one of the new error codes (`-32020`,
+     `-32022`), so the client falls back to `initialize`, as the
+     specification's compatibility matrix intends.
+   - **A client that speaks only `2026-07-28`** cannot connect.
+   - *Recommended: become dual-era when a client aCelery cares about stops
+     speaking the older revisions. Until then, keep the 400 on a missing
+     session free of the new error codes, or dual-era clients will stop
+     falling back.*
+
 
 ## 14. M0: implemented (2026-09-15)
 
@@ -446,3 +465,184 @@ emulator over `adb forward`.
   - The test app and databases were deleted afterwards.
 - **Not done:** a revoke on the device (it is covered in tests), a real phone
   over Wi-Fi, Claude Desktop, and iOS.
+
+## 16. M2: implemented (2026-09-16)
+
+An assistant on another computer can now be given a key and connect, and a
+wrong or revoked key fails cleanly. Verified on the emulator, and across this
+Mac's LAN address with `tool/serve.dart`; no physical phone was attached.
+
+**What was built:**
+
+- **`lib/src/mcp/connect.dart`.** `AssistantConnection` builds the Claude Code
+  command and the Claude Desktop config entry. The app and `serve.dart` both
+  use it, so the lines people paste cannot differ between them, and a test
+  pins their shape.
+  - **The Desktop entry:** `npx -y mcp-remote <url> --allow-http --transport
+    http-only --header Authorization:${AUTH_HEADER}`, with `AUTH_HEADER` in
+    `env`. The flags are there for three reasons:
+    - `mcp-remote` refuses plain HTTP to anything but localhost without
+      `--allow-http`.
+    - `http-only` stops a fall back to SSE, which aCelery has no endpoint for
+      and which would hide the real error.
+    - The key sits in `env`, not in the arguments, which other users on the
+      computer can read. `mcp-remote` expands `${AUTH_HEADER}` itself.
+- **`pickLanAddress`.** It prefers a Wi-Fi or wired interface (`wlan`, `en`,
+  `eth`), then any private address, then anything. The sheet used to take the
+  first address, which on a phone can be the mobile-data one. The emulator
+  now reports `10.0.2.16` on `wlan0`.
+- **"Connect an assistant"** in `lib/src/shell/connect_assistant.dart`:
+  - It asks for a name, so the right key can be revoked later.
+  - It shows the address, the key, the Claude Code line and the Claude
+    Desktop entry, each with a copy button.
+  - With sharing off it says the address works only over `adb forward`, and
+    that sharing must be on to connect from another computer.
+  - It warns that the key travels unencrypted on the Wi-Fi.
+- **Last seen is saved.** `AccessControl._seen` writes the store when a
+  device's last-seen is over a minute old or its address changed. It used to
+  live only in memory, so after a restart an assistant that had been working
+  for an hour was listed as "Not connected yet". Browsers get the same fix.
+- **The sheet redraws every 5 seconds** while it is open, so a device calling
+  in the background shows up.
+- **`tool/serve.dart --mint-token`** mints a client key, prints both
+  connection texts, and adds `"token"` to the ready file.
+
+**Found and fixed: OAuth probes raised pairing prompts.**
+
+- With a wrong or revoked key, `mcp-remote` goes looking for OAuth. A logging
+  proxy recorded, in order:
+  - `GET /mcp`
+  - `GET /.well-known/oauth-protected-resource/mcp`
+  - `GET /.well-known/oauth-protected-resource`
+  - `GET /.well-known/oauth-authorization-server`
+  - `POST /mcp`
+  - the same three discovery GETs again
+  - `GET /.well-known/openid-configuration`
+  - `POST /register`
+- Every one went through the pairing gate. From a network peer that raised
+  "Allow this device?" on the device, for a client that can never pair, and
+  `mcp-remote` then hung.
+- The gate now answers `.well-known/*`, `register`, `authorize` and `token`
+  with a 404 before pairing. The body is an OAuth error:
+  `{"error":"invalid_request","error_description":"aCelery does not use
+  OAuth. …"}`. Nothing in the tree lives at those paths.
+- Afterwards `mcp-remote` exited at once with `InvalidRequestError: aCelery
+  does not use OAuth. Create a key in aCelery under Network access and send it
+  as "Authorization: Bearer <key>".`, and no prompt was raised.
+
+**Tests.** Dart went from 236 to 247 passing, node stays at 105, and
+`flutter analyze` is clean.
+
+- **`test/mcp_connect_test.dart`**: the Claude Code line, the Desktop entry
+  (key kept out of the arguments, `--allow-http`, `http-only`), and address
+  picking.
+- **`access_control_test.dart`**, from a real LAN address:
+  - an assistant with its key reaches `/mcp`, is listed with its address,
+    and gets 401 once the key is revoked
+  - OAuth discovery gets 404 and raises no prompt
+  - with sharing off, a valid key gets 403
+- **`mcp_test.dart`**: a client's last call survives reloading the store.
+- **Confirmed to fail without their fix:** the OAuth probe test (401 instead
+  of 404) and the last-seen test (address `''`).
+
+**Verified.**
+
+- **`mcp-remote` over the LAN.** `serve.dart --share --mint-token` ran on
+  `192.168.100.125`. The Desktop entry was parsed from its printed output, and
+  `mcp-remote` was launched exactly as Claude Desktop would launch it, driven
+  over stdio. `initialize` agreed `2025-06-18`, the 11 tools were listed, and
+  `list_apps` and `create_app` worked.
+- **Emulator, debug APK:**
+  - Naming a key, the key dialog with and without sharing, the copy button
+    (Android showed the copied JSON), and the Wi-Fi address with sharing on
+    all worked.
+  - A key answered 200, was revoked in the list, and then answered 401.
+  - After a call, the list showed "127.0.0.1 · last seen just now" within
+    5 seconds, and again after the app was restarted.
+  - The emulator was left with sharing off and no keys.
+
+**Not verified:**
+
+- A physical phone on Wi-Fi reached from another computer.
+- Claude Desktop itself: `mcp-remote` was run as Desktop runs it, but Desktop's
+  config was not edited without asking.
+- iOS.
+
+## 17. Serving with the screen off, on Android (2026-09-16)
+
+Found while testing M2 on a physical phone (Xiaomi, HyperOS, Android 16, API
+36): the server stopped answering as soon as the screen went off.
+
+**Cause, from the device:**
+
+- The process stayed alive, but `dumpsys greezer` logged
+  `FZ uid = 10476 pid = [ 25453 ] reason : screen off`. Its cgroup reported
+  `frozen 1`, and `THAW … reason : Activity Resume` came only when the app was
+  opened again.
+- Android's own freezer was off on this phone (`use_freezer=false`). Xiaomi's
+  `GreezeManager` did the freezing.
+- The phone still answered ping, but `/mcp` timed out both over Wi-Fi and over
+  `adb forward`. So the app was suspended; the network was fine.
+- Stock Android would lose the network later, in Doze.
+
+**Decision (Xavier):** a foreground service runs exactly while "Share on this
+network" is on, with type `connectedDevice`. It was chosen over a separate
+switch, and over running only during MCP sessions, which cannot work because a
+frozen app cannot start a service when a client arrives. `connectedDevice`
+was chosen over `dataSync` (capped at 6 hours a day from Android 15) and over
+`specialUse` (which needs a written Play justification).
+
+**Built:**
+
+- **`android/…/ServingService.kt`.**
+  - A foreground service of type `connectedDevice`.
+  - Its notification uses a low-importance channel and says "aCelery is shared
+    on this network". It shows the address and has a "Stop sharing" action.
+    The small icon is the seedling glyph.
+  - The service is `START_NOT_STICKY`: after a kill, the system would bring it
+    back with no server behind it.
+- **`MainActivity.kt`.**
+  - It adds channel `acelery/serving`, with `start` and `stop`.
+  - It asks for `POST_NOTIFICATIONS` when sharing starts. On Android 13+ the
+    service runs either way, but its notification is hidden without it.
+  - It stops the service in `cleanUpFlutterEngine`, because the server lives
+    in that engine.
+  - "Stop sharing" calls back into Dart, which turns sharing off, and that
+    stops the service.
+- **Manifest.** `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE`,
+  `CHANGE_NETWORK_STATE` (one of the prerequisites that type requires) and
+  `POST_NOTIFICATIONS`.
+- **`lib/src/serving.dart`.** `BackgroundServing` starts or stops the service
+  to match sharing: at launch, and through `ACeleryServer.onSharingChanged`,
+  which fires after the socket has rebound. A `PlatformException` is logged
+  rather than thrown, so a refused start cannot stop the app launching. It does
+  nothing off Android.
+- **Test.** `access_control_test.dart` checks that sharing changes are reported
+  once each, after the rebind, and that repeating the current setting reports
+  nothing. Dart: 248 pass.
+
+**Verified on the phone** with a debug build, sharing on, and the screen left
+to time out by itself. Every 10 seconds for 4 minutes a monitor recorded
+wakefulness, the Doze state, the process cgroup's `frozen` flag, and a request
+to `http://192.168.100.119:8123/mcp` from the Mac:
+
+- `dumpsys activity services` showed `isForeground=true`, with types
+  `0x00000010` (`connectedDevice`).
+- The screen went off at 11:32:31, and Doze moved through `INACTIVE`,
+  `IDLE_PENDING` and `SENSING` to `IDLE` at 11:35:11.
+- Throughout, `frozen=0`, and every request answered 401 (no key sent) in
+  about 33 ms.
+- `dumpsys greezer` logged no freeze for the new process. The old build had
+  logged `FZ … reason : screen off` at 11:30:24.
+- The "Stop sharing" button was tapped by hand on the phone (it refuses input
+  from adb). Sharing turned off and the notification went away.
+
+**Not verified:**
+
+- The notification permission prompt.
+- Stock Android, and other vendors' freezers.
+- Swiping aCelery out of recents destroys the Flutter engine, which stops the
+  server, and the service goes with it. Serving after that would need an
+  engine owned by the service, which is not built.
+- iOS cannot serve in the background at all.
+

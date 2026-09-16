@@ -1,5 +1,5 @@
 // Runs the real aCelery server on this machine, for driving the web bundle
-// from a desktop browser — or from a program, such as the MCP server.
+// from a desktop browser, or its MCP server from an assistant.
 //
 //     dart run tool/serve.dart            # loopback only, throwaway tree
 //     dart run tool/serve.dart --share    # and on this machine's LAN address
@@ -11,6 +11,9 @@
 //                         shipped bundle is refreshed whenever
 //                         assets/aCelery.zip changes.
 //     --port <n>          Listen on <n> (default 8123). 0 lets the OS pick.
+//     --mint-token        Mint an MCP client token, as "Connect an assistant"
+//                         does in the app, and print how to connect with it.
+//                         Written to the ready file too, as "token".
 //     --ready-file <f>    Once listening, write {"url", "port", "root"} as JSON
 //                         to <f>, atomically. A parent process waits for the
 //                         file rather than parsing stdout, which `dart run`
@@ -42,6 +45,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:acelery/src/bundle_installer.dart';
+import 'package:acelery/src/mcp/connect.dart';
 import 'package:acelery/src/paths.dart';
 import 'package:acelery/src/server/acelery_server.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -50,7 +54,8 @@ Future<void> main(List<String> args) async {
   final options = _Options.parse(args);
   if (options == null) {
     stderr.writeln('usage: dart run tool/serve.dart '
-        '[--share] [--root <dir>] [--port <n>] [--ready-file <path>]');
+        '[--share] [--root <dir>] [--port <n>] [--mint-token] '
+        '[--ready-file <path>]');
     exit(64);
   }
 
@@ -112,6 +117,10 @@ Future<void> main(List<String> args) async {
 
   await server.start();
   final port = server.boundPort;
+  final lan = await lanAddress();
+  final token = options.mintToken
+      ? await server.access.mintClient(label: 'serve.dart')
+      : null;
 
   final readyFile = options.readyFile;
   if (readyFile != null) {
@@ -123,11 +132,11 @@ Future<void> main(List<String> args) async {
       'url': 'http://127.0.0.1:$port/',
       'port': port,
       'root': paths.root,
+      'token': ?token,
     }));
     await partial.rename(readyFile);
   }
 
-  final lan = await _lanAddress();
   stdout
     ..writeln('')
     ..writeln('  aCelery is serving on:')
@@ -137,8 +146,21 @@ Future<void> main(List<String> args) async {
   } else if (!options.share) {
     stdout.writeln('  Pass --share to also listen on this machine\'s LAN address.');
   }
+  stdout.writeln('');
+  if (token != null) {
+    final connection = AssistantConnection(
+      url: 'http://${options.share && lan != null ? lan : '127.0.0.1'}:$port/mcp',
+      token: token,
+    );
+    stdout
+      ..writeln('  An MCP client token was minted. Claude Code:')
+      ..writeln('      ${connection.claudeCode}')
+      ..writeln('')
+      ..writeln('  Claude Desktop (claude_desktop_config.json):')
+      ..writeln(connection.claudeDesktop.replaceAll(RegExp('^', multiLine: true), '      '))
+      ..writeln('');
+  }
   stdout
-    ..writeln('')
     ..writeln(persistent
         ? '  Ctrl-C to stop. The tree in ${root.path} is kept.'
         : '  Ctrl-C to stop. The temp tree is removed on exit.')
@@ -192,16 +214,19 @@ class _Options {
     required this.root,
     required this.port,
     required this.readyFile,
+    required this.mintToken,
   });
 
   final bool share;
   final String? root;
   final int port;
   final String? readyFile;
+  final bool mintToken;
 
   /// Null when the arguments cannot be understood.
   static _Options? parse(List<String> args) {
     var share = false;
+    var mintToken = false;
     String? root;
     String? readyFile;
     var port = ACeleryServer.defaultPort;
@@ -210,6 +235,8 @@ class _Options {
       switch (args[i]) {
         case '--share':
           share = true;
+        case '--mint-token':
+          mintToken = true;
         case '--root' when i + 1 < args.length:
           root = args[++i];
         case '--ready-file' when i + 1 < args.length:
@@ -223,24 +250,15 @@ class _Options {
       }
     }
     return _Options(
-        share: share, root: root, port: port, readyFile: readyFile);
+        share: share,
+        root: root,
+        port: port,
+        readyFile: readyFile,
+        mintToken: mintToken);
   }
 }
 
 String _zipStamp(File zip) {
   final stat = zip.statSync();
   return 'dev-${stat.size}-${stat.modified.millisecondsSinceEpoch}';
-}
-
-Future<String?> _lanAddress() async {
-  final interfaces = await NetworkInterface.list(
-    type: InternetAddressType.IPv4,
-    includeLoopback: false,
-  );
-  for (final i in interfaces) {
-    for (final a in i.addresses) {
-      if (!a.isLoopback) return a.address;
-    }
-  }
-  return null;
 }

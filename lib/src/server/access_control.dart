@@ -75,7 +75,7 @@ class AccessControl {
     final token = _tokenOf(request);
     final device = token == null ? null : _devices[token];
     if (device != null) {
-      device.lastSeen = DateTime.now();
+      _seen(device, address);
       return const Access.allowed();
     }
 
@@ -101,10 +101,28 @@ class AccessControl {
     if (device == null || device.kind != DeviceKind.client) {
       return const Access.unauthorized();
     }
-    device.lastSeen = DateTime.now();
-    device.address = address.address;
+    _seen(device, address);
     return const Access.allowed();
   }
+
+  /// Notes that [device] called, from [address].
+  ///
+  /// Saved, but not on every request: a page load is dozens of them. Without
+  /// saving at all, a restart forgot every device's last call, and an
+  /// assistant that had been working for an hour was listed as "Not connected
+  /// yet".
+  void _seen(PairedDevice device, InternetAddress address) {
+    final now = DateTime.now();
+    final stale = now.difference(device.lastSeen) > saveSeenEvery;
+    final moved = device.address != address.address;
+    device
+      ..lastSeen = now
+      ..address = address.address;
+    if (stale || moved) unawaited(save());
+  }
+
+  /// How far `lastSeen` may drift from the store before it is written again.
+  static const Duration saveSeenEvery = Duration(minutes: 1);
 
   /// The pairing this address is already waiting on, or a new one.
   ///

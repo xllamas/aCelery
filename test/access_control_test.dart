@@ -89,6 +89,22 @@ void main() {
       expect(response.statusCode, 200);
     });
 
+    test('turning sharing on or off is reported, once the socket has rebound',
+        () async {
+      // The app starts and stops its Android foreground service from this
+      // (lib/src/serving.dart), so a change must be reported exactly when it
+      // happens, and a repeat of the current setting must not be.
+      await server.setSharedOnNetwork(false); // this group starts shared
+      final reported = <(bool, bool)>[];
+      server.onSharingChanged = (shared) async {
+        reported.add((shared, server.isRunning));
+      };
+      await server.setSharedOnNetwork(true);
+      await server.setSharedOnNetwork(true);
+      await server.setSharedOnNetwork(false);
+      expect(reported, [(true, true), (false, true)]);
+    });
+
     test('is told it does not need to pair', () async {
       final response = await http
           .get(Uri.parse('http://127.0.0.1:${server.boundPort}/acelery.pair'));
@@ -126,6 +142,66 @@ void main() {
       expect(response.statusCode, 401);
       // Not the extpath, and not a hint of one.
       expect(response.body, isNot(contains('aCelery/files')));
+    });
+
+    Future<http.Response> initializeMcp({String? token}) => http.post(
+          Uri.parse('$origin/mcp'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': ?(token == null ? null : 'Bearer $token'),
+          },
+          body: jsonEncode({
+            'jsonrpc': '2.0',
+            'id': 1,
+            'method': 'initialize',
+            'params': {
+              'protocolVersion': '2025-06-18',
+              'capabilities': {},
+              'clientInfo': {'name': 'test', 'version': '1'},
+            },
+          }),
+        );
+
+    test('an assistant with its key reaches /mcp, until the key is revoked',
+        () async {
+      // M2: the MCP route from a real non-loopback peer, not only loopback.
+      if (lan == null) return;
+      final token = await server.access.mintClient(label: 'laptop');
+
+      final allowed = await initializeMcp(token: token);
+      expect(allowed.statusCode, 200, reason: allowed.body);
+      expect(allowed.headers['mcp-session-id'], isNotEmpty);
+      expect(server.access.deviceByToken(token)!.address, lan!.address,
+          reason: 'the list shows where the assistant last called from');
+
+      await server.access.revoke(token);
+      expect((await initializeMcp(token: token)).statusCode, 401);
+      expect(server.access.pending, isEmpty);
+    });
+
+    test('OAuth discovery raises no pairing prompt', () async {
+      // mcp-remote with a wrong or revoked key asks for these before giving
+      // up. Through the gate, each one raised "Allow this device?" on the
+      // phone.
+      if (lan == null) return;
+      expect((await initializeMcp(token: 'wrong')).statusCode, 401);
+      for (final path in [
+        '/.well-known/oauth-protected-resource/mcp',
+        '/.well-known/oauth-protected-resource',
+        '/.well-known/oauth-authorization-server',
+        '/.well-known/openid-configuration',
+      ]) {
+        final response = await http.get(Uri.parse('$origin$path'),
+            headers: {'Accept': 'application/json'});
+        expect(response.statusCode, 404, reason: path);
+        expect(jsonDecode(response.body)['error_description'],
+            contains('does not use OAuth'),
+            reason: path);
+      }
+      final register = await http.post(Uri.parse('$origin/register'),
+          headers: {'Content-Type': 'application/json'}, body: '{}');
+      expect(register.statusCode, 404);
+      expect(server.access.pending, isEmpty);
     });
 
     test('a subresource gets a status, not a page of HTML', () async {
@@ -221,6 +297,14 @@ void main() {
         },
       );
       expect(response.body, contains('Approve this device'));
+    });
+
+    test('with sharing off, an assistant with a key is still refused',
+        () async {
+      if (lan == null) return;
+      final token = await server.access.mintClient();
+      await server.access.setShared(false);
+      expect((await initializeMcp(token: token)).statusCode, 403);
     });
 
     test('with sharing off, there is nothing to pair with', () async {

@@ -373,6 +373,25 @@ void main() {
       expect(result, isA<AccessPairingRequired>());
     });
 
+    test("a client's last call survives a restart", () async {
+      // Kept only in memory, it was lost on every launch, and an assistant
+      // that had been working all afternoon was listed as never connected.
+      await server.access.setShared(true);
+      final paired = server.access.deviceByToken(token)!.pairedAt;
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      server.access.checkClient(
+          withHeaders({'authorization': 'Bearer $token'}), peer);
+      // The save is not awaited by the gate; let it land.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      final reloaded = AccessControl(storeFile: File(paths.accessStore));
+      await reloaded.load();
+      final device = reloaded.deviceByToken(token)!;
+      expect(device.address, '192.168.1.50');
+      expect(device.lastSeen.isAfter(paired), isTrue);
+      reloaded.dispose();
+    });
+
     test('client tokens persist with their kind', () async {
       final reloaded = AccessControl(storeFile: File(paths.accessStore));
       await reloaded.load();

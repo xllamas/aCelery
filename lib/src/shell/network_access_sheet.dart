@@ -1,10 +1,11 @@
-import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import '../mcp/connect.dart';
 import '../server/acelery_server.dart';
 import '../server/access_control.dart';
+import 'connect_assistant.dart';
 
 /// Turning network sharing on, and seeing who is on it.
 ///
@@ -27,21 +28,28 @@ class _NetworkAccessSheetState extends State<NetworkAccessSheet> {
 
   AccessControl get _access => widget.server.access;
 
+  /// Redraws "last seen" while the sheet is open. Devices call in the
+  /// background — an assistant working while the user watches — and nothing
+  /// else would tell the list.
+  Timer? _tick;
+
   @override
   void initState() {
     super.initState();
     _findAddress();
+    _tick = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
   }
 
   Future<void> _findAddress() async {
-    final interfaces = await NetworkInterface.list(
-      type: InternetAddressType.IPv4,
-      includeLoopback: false,
-    );
-    final address = interfaces
-        .expand((i) => i.addresses)
-        .map((a) => a.address)
-        .firstOrNull;
+    final address = await lanAddress();
     if (mounted) setState(() => _address = address);
   }
 
@@ -53,21 +61,10 @@ class _NetworkAccessSheetState extends State<NetworkAccessSheet> {
     if (mounted) setState(() => _busy = false);
   }
 
-  /// Mints a client token and shows it, once, to copy into an assistant.
   Future<void> _connectAssistant() async {
-    final token = await _access.mintClient();
-    if (!mounted) return;
-    setState(() {});
-    // With sharing off the only way in is loopback, which on a phone means
-    // `adb forward` from a computer.
-    final host = _access.sharedOnNetwork && _address != null
-        ? _address!
-        : 'localhost';
-    await showAssistantToken(
-      context,
-      url: 'http://$host:${widget.server.boundPort}/mcp',
-      token: token,
-    );
+    if (await connectAssistant(context, widget.server) && mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _revoke(PairedDevice device) async {
@@ -173,64 +170,6 @@ class _NetworkAccessSheetState extends State<NetworkAccessSheet> {
     if (gap.inDays < 1) return '${gap.inHours} h ago';
     return '${gap.inDays} d ago';
   }
-}
-
-/// Shows a freshly minted client token, the only time it is shown.
-Future<void> showAssistantToken(
-  BuildContext context, {
-  required String url,
-  required String token,
-}) {
-  final command = 'claude mcp add --transport http aCelery $url '
-      '--header "Authorization: Bearer $token"';
-  const mono = TextStyle(fontFamily: 'monospace', fontSize: 13);
-
-  Widget copyable(String label, String value) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(child: Text(label)),
-              IconButton(
-                icon: const Icon(Icons.copy, size: 20),
-                tooltip: 'Copy',
-                onPressed: () => Clipboard.setData(ClipboardData(text: value)),
-              ),
-            ],
-          ),
-          SelectableText(value, style: mono),
-          const SizedBox(height: 12),
-        ],
-      );
-
-  return showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Connect an assistant'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            copyable('Address', url),
-            copyable('Key', token),
-            copyable('For Claude Code', command),
-            const Text(
-              'This key is shown once. Anyone holding it can read and change '
-              'your apps and databases, so revoke it here when you are done.',
-              style: TextStyle(fontSize: 12),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
-        ),
-      ],
-    ),
-  );
 }
 
 /// The prompt a device's request raises.

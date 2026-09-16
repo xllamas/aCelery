@@ -135,6 +135,26 @@ class ACeleryServer {
       // The MCP server has its own rules, and none of them is pairing.
       if (request.url.path == 'mcp') return _mcp(request, peer);
 
+      // An MCP client whose key is wrong or revoked goes looking for OAuth:
+      // mcp-remote asks for four /.well-known/ documents and then POSTs
+      // /register. Through the gate, each of those raised an "Allow this
+      // device?" prompt on the phone, for something that can never pair.
+      // aCelery has no OAuth and nothing in the tree lives at these paths, so
+      // they are answered here: the client fails fast and says why.
+      if (_isOAuthProbe(request.url.path)) {
+        // Shaped as an OAuth error, so a client prints the description rather
+        // than a complaint that the body is not JSON.
+        return Response.notFound(
+          jsonEncode({
+            'error': 'invalid_request',
+            'error_description': 'aCelery does not use OAuth. Create a key in '
+                'aCelery under Network access and send it as '
+                '"Authorization: Bearer <key>".',
+          }),
+          headers: {'Content-Type': 'application/json; charset=utf-8'},
+        );
+      }
+
       // The pairing endpoints are the one thing an unpaired device may reach,
       // or it could never become paired.
       if (request.url.path.startsWith('acelery.pair')) {
@@ -192,6 +212,10 @@ class ACeleryServer {
     // gets. Failing closed here would lock the app out of its own server.
     return InternetAddress.loopbackIPv4;
   }
+
+  static bool _isOAuthProbe(String path) =>
+      path.startsWith('.well-known/') ||
+      const {'register', 'authorize', 'token'}.contains(path);
 
   static Response get _notShared => Response.forbidden(
         'aCelery is not shared on this network.',
@@ -287,12 +311,20 @@ class ACeleryServer {
   Future<void> setSharedOnNetwork(bool shared) async {
     if (access.sharedOnNetwork == shared && isRunning) return;
     await access.setShared(shared);
-    if (!isRunning) return;
-
-    await _server?.close(force: true);
-    _server = null;
-    await start();
+    if (isRunning) {
+      await _server?.close(force: true);
+      _server = null;
+      await start();
+    }
+    await onSharingChanged?.call(shared);
   }
+
+  /// Told whenever sharing is turned on or off, after the socket has rebound.
+  ///
+  /// The app uses it to keep the server alive with the screen off while
+  /// sharing is on (lib/src/serving.dart). This class stays free of Flutter,
+  /// so the harness in tool/serve.dart and the tests can run it.
+  Future<void> Function(bool shared)? onSharingChanged;
 
   Future<void> stop() async {
     await _server?.close(force: true);

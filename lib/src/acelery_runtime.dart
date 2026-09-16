@@ -6,6 +6,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import 'bundle_installer.dart';
 import 'paths.dart';
 import 'server/acelery_server.dart';
+import 'serving.dart';
 
 /// Brings the aCelery host up: install the web bundle, then start the server
 /// that hosts it.
@@ -66,6 +67,12 @@ class ACeleryRuntime {
     // across launches — so this has to be read before the socket is bound.
     await server.access.load();
     await server.start();
+
+    // Sharing may have been left on at the last launch, so the service starts
+    // here too, not only when the switch is flipped.
+    final serving = BackgroundServing(server);
+    server.onSharingChanged = serving.update;
+    await serving.update(server.access.sharedOnNetwork);
 
     return ACeleryRuntime._(paths, server);
   }
