@@ -199,8 +199,8 @@ function ExportDemo({ db }) {
   return html`
     <${Panel} title="Export">
       <p>
-        Writes the directory out as CSV and hands it to the device — the system
-        share sheet on Android, a download in a browser on your network.
+        Writes the directory out as CSV and hands it to the device — the share
+        sheet on a phone, a download in a browser on your network.
       </p>
       <${Button} variant="primary" onClick=${exportCsv}>Export CSV<//>
       ${status

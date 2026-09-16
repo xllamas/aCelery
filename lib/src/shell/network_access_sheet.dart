@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -95,6 +96,7 @@ class _NetworkAccessSheetState extends State<NetworkAccessSheet> {
               shared
                   ? 'Other devices can ask to connect. Each one needs your '
                       'approval before it sees anything.'
+                      '${Platform.isIOS ? _iosForegroundOnly : ''}'
                   : 'aCelery is only listening on this device.',
             ),
           ),
@@ -162,6 +164,14 @@ class _NetworkAccessSheetState extends State<NetworkAccessSheet> {
       ),
     );
   }
+
+  /// iOS suspends an app within seconds of it leaving the screen, and offers
+  /// nothing like Android's foreground service (lib/src/serving.dart), so the
+  /// server stops answering. Measured on the simulator: 4 s after switching
+  /// away, requests timed out; back on screen, they answered at once.
+  static const String _iosForegroundOnly =
+      '\n\nOn iPhone and iPad this works only while aCelery is open on '
+      'screen. Turn on Keep screen on in Settings for longer sessions.';
 
   static String _ago(DateTime when) {
     final gap = DateTime.now().difference(when);

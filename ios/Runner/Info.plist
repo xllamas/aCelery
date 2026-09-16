@@ -53,6 +53,12 @@
 	     127.0.0.1, which is where xscript.js reaches its native bridge.
 	     NSAllowsLocalNetworking permits exactly that without relaxing App
 	     Transport Security for anything else. -->
+	<!-- Serving needs no permission: accepting incoming connections is exempt
+	     from local network privacy. Reaching out does not: an app calling a
+	     device on the Wi-Fi through acelery/http.js needs the user's consent,
+	     and from iOS 18 the prompt is only shown when this key is set. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Apps you build in aCelery can reach devices on your local network, such as a printer or a home server.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

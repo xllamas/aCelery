@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -155,6 +157,15 @@ Future<void> _showKey(
                 help: 'Add this to claude_desktop_config.json (Settings → '
                     'Developer → Edit Config), then restart Claude. Needs '
                     'Node.js on the computer.'),
+            if (Platform.isIOS)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'iOS pauses aCelery when it leaves the screen, and the '
+                  'assistant loses its connection until you open it again.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
             const Text(
               'The key is shown only now. Anyone holding it can read and '
               'change your apps and databases, and it travels unencrypted '

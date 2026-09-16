@@ -1,5 +1,8 @@
-# Uncomment this line to define a global platform for your project
-# platform :ios, '13.0'
+# 16.4, not the 14.0 the plugins need: the IDE and every user app load their
+# modules through an import map (bundle/www/system/launcher.html), which
+# WKWebView supports from iOS 16.4. On anything older the app installs and
+# then shows nothing that works.
+platform :ios, '16.4'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
