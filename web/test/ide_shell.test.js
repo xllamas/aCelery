@@ -16,6 +16,7 @@ import { JSDOM } from "jsdom";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { registerHooks } from "node:module";
+import { readFileSync } from "node:fs";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const aceleryDir = join(repo, "bundle/www/tools/js/acelery");
@@ -154,6 +155,12 @@ function makeHost({
 
     let payload = {};
     let text = null;
+
+    if (parsed.pathname.startsWith("/system/scaffold/")) {
+      // Static files the shell fetches: served from the bundle, as the host does.
+      const body = readFileSync(`${repo}/bundle/www${parsed.pathname}`, "utf8");
+      return { ok: true, status: 200, text: async () => body, json: async () => JSON.parse(body) };
+    }
 
     if (opt === "file") {
       switch (action) {
@@ -318,6 +325,37 @@ test("routes encode every segment and decode them back", () => {
   assert.deepEqual(router.parse("#/"), { section: "home", parts: [] });
   // A stray % is a name, not an exception.
   assert.deepEqual(router.parse("#/code/100%"), { section: "code", parts: ["100%"] });
+});
+
+test("New project builds the app from the bundle's scaffold", async () => {
+  // The rules and templates are fetched from /system/scaffold/, the files the
+  // MCP server's create_app reads too (doc/mcp-server.md §7, P5).
+  const host = await open("#/code");
+  (await waitFor(() => byLabel("New project"), "the New project button")).click();
+  const name = await waitFor(() => document.querySelector('input[name="name"]'), "the name field");
+
+  // jsdom does not submit a form from a button click, so the submit is fired.
+  const submit = async (value) => {
+    name.value = value;
+    name.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 0));
+    name.form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+  };
+
+  await submit("my app");
+  await waitFor(() => /Letters, numbers and underscore/.test(text(document.body)),
+    "the scaffold's name rule");
+
+  await submit("water");
+  const base = `${STORAGE}/aCelery/www/user/Water`;
+  await waitFor(() => host.files.get(`${base}/main.js`), "the entry module");
+
+  assert.deepEqual(JSON.parse(host.files.get(`${base}/acelery_app.json`)), {
+    name: "Water", description: "", entry: "main.js",
+  });
+  const template = readFileSync(join(repo, "bundle/www/system/scaffold/main.js.template"), "utf8");
+  assert.equal(host.files.get(`${base}/main.js`), template.replaceAll("{{name}}", "Water"));
+  await waitFor(() => window.location.hash === "#/code/Water/main.js", "the new entry module");
 });
 
 test("opening a project pushes history, and Back steps out one level", async () => {

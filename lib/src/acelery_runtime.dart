@@ -16,7 +16,7 @@ class ACeleryRuntime {
 
   /// Bump when `assets/aCelery.zip` changes, so installed devices refresh the
   /// shipped files on their next launch. User content is never touched.
-  static const String bundleVersion = '1.6.3+mcp-m0';
+  static const String bundleVersion = '1.6.4+mcp-m1';
 
   final ACeleryPaths paths;
   final ACeleryServer server;
@@ -60,6 +60,7 @@ class ACeleryRuntime {
       paths: paths,
       databaseFactory: factory ?? databaseFactory,
       port: port,
+      version: bundleVersion,
     );
     // Who is paired, and whether to listen beyond loopback, are both remembered
     // across launches — so this has to be read before the socket is bound.

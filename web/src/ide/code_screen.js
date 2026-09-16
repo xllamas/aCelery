@@ -18,14 +18,14 @@ import {
   EmptyState, IconButton, InlineError, ProjectCard, Sheet, Skeleton, useToast,
 } from "./parts.js";
 import { navigate, takeIntent } from "./router.js";
-import { descriptionProblem, nameProblem } from "./scaffold.js";
+import { loadScaffold } from "./scaffold.js";
 import { createProject, deleteProject, hasHost, listProjects } from "./store.js";
 import {
   SearchField, SEARCH_THRESHOLD, confirmDeleteProject, matches,
 } from "./apps_screen.js";
 
-/** Rules carried over from createProject(), plus a check for a name in use. */
-function NewProjectSheet({ show, existing, onClose, onCreate }) {
+/** The scaffold's rules, plus a check for a name in use. */
+function NewProjectSheet({ show, scaffold, existing, onClose, onCreate }) {
   const taken = (v) => {
     const wanted = (v ?? "").trim().toLowerCase();
     return existing.some((p) => p.name.toLowerCase() === wanted)
@@ -42,12 +42,12 @@ function NewProjectSheet({ show, existing, onClose, onCreate }) {
             autocapitalize="off" autocomplete="off" spellcheck=${false}
             validate=${[
               notEmpty("A name is required"),
-              (v) => nameProblem(v) ?? true,
+              (v) => scaffold.nameProblem(v) ?? true,
               taken,
             ]} />
           <${Input} label="Description" name="description" as="textarea"
             placeholder="What it does, in a sentence (optional)"
-            validate=${[(v) => descriptionProblem(v) ?? true]} />
+            validate=${[(v) => scaffold.descriptionProblem(v) ?? true]} />
         <//>
         <${Modal.Footer}>
           <${Button} variant="outline-secondary" type="button" onClick=${onClose}>
@@ -61,6 +61,7 @@ function NewProjectSheet({ show, existing, onClose, onCreate }) {
 
 export function CodeScreen({ settings, updateSettings }) {
   const [projects, setProjects] = useState(null);
+  const [scaffold, setScaffold] = useState(null);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(() => takeIntent("new-project"));
@@ -78,13 +79,19 @@ export function CodeScreen({ settings, updateSettings }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // The New project sheet validates against the scaffold's rules, so it is
+  // fetched up front rather than when the sheet opens.
+  useEffect(() => {
+    loadScaffold().then(setScaffold, setError);
+  }, []);
+
   async function create(values) {
     setCreating(false);
     try {
       const name = await createProject(values);
       toast(`Created ${name}`);
       // Straight into the scaffolded entry module, which already runs.
-      navigate(["code", name, "main.js"]);
+      navigate(["code", name, scaffold.entry]);
     } catch (e) {
       setError(e);
     }
@@ -152,7 +159,10 @@ export function CodeScreen({ settings, updateSettings }) {
       <${InlineError} error=${error} onClose=${() => setError(null)} />
       ${body}
     <//>
-    <${NewProjectSheet} show=${creating} existing=${projects ?? []}
-      onClose=${() => setCreating(false)} onCreate=${create} />
+    ${scaffold
+      ? html`<${NewProjectSheet} show=${creating} scaffold=${scaffold}
+          existing=${projects ?? []}
+          onClose=${() => setCreating(false)} onCreate=${create} />`
+      : null}
     ${dialog}`;
 }

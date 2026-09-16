@@ -8,7 +8,7 @@
 import * as file from "acelery/file.js";
 import { openDB } from "acelery/sql.js";
 
-import { ENTRY, entryModule, manifestText, projectName } from "./scaffold.js";
+import { loadScaffold } from "./scaffold.js";
 
 /* ----------------------------------------------------------------- config */
 
@@ -159,22 +159,20 @@ export async function deleteProject(name) {
 }
 
 /**
- * Creates a project folder, its manifest and a runnable entry module, from the
- * scaffold the MCP server shares (scaffold.js). The name is capitalised, as
- * createProject() always did.
+ * Creates a project folder and its starting files — a manifest and a runnable
+ * entry module — from the scaffold the MCP server shares (scaffold.js). The
+ * name is capitalised, as createProject() always did.
  *
  * @returns {Promise<string>} the name actually used
  */
 export async function createProject({ name, description }) {
-  const pName = projectName(name);
+  const scaffold = await loadScaffold();
+  const pName = scaffold.projectName(name);
   const base = await userBase();
   await file.mkdir(pName, base);
-  await writeProjectFile(
-    pName,
-    "acelery_app.json",
-    manifestText(pName, description),
-  );
-  await writeProjectFile(pName, ENTRY, entryModule(pName));
+  for (const [fname, text] of Object.entries(scaffold.files(pName, description))) {
+    await writeProjectFile(pName, fname, text);
+  }
   return pName;
 }
 

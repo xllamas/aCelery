@@ -10,6 +10,8 @@ import '../bridge/export_bridge.dart';
 import '../bridge/file_bridge.dart';
 import '../bridge/http_bridge.dart';
 import '../bridge/sql_bridge.dart';
+import '../mcp/server.dart';
+import '../mcp/transport.dart';
 import '../paths.dart';
 import 'access_control.dart';
 import 'itf_handler.dart';
@@ -28,6 +30,7 @@ class ACeleryServer {
     this.port = defaultPort,
     this.address,
     AccessControl? access,
+    String version = 'dev',
   })  : sql = SqlBridge(paths: paths, factory: databaseFactory),
         files = FileBridge(paths: paths),
         http = HttpBridge(),
@@ -35,7 +38,11 @@ class ACeleryServer {
         access = access ??
             AccessControl(
               storeFile: File(paths.accessStore),
-            );
+            ) {
+    // Built here rather than in start(), so sessions survive the rebind that
+    // turning network sharing on or off performs.
+    mcp = McpTransport(McpServer(paths: paths, sql: sql, version: version));
+  }
 
   /// The port the bundle hard-codes in `xRunUserApp` and the IDE's URLs.
   static const int defaultPort = 8123;
@@ -58,6 +65,9 @@ class ACeleryServer {
   final FileBridge files;
   final HttpBridge http;
   final ExportBridge export;
+
+  /// `/mcp`: the MCP server an assistant connects to (doc/mcp-server.md).
+  late final McpTransport mcp;
 
   HttpServer? _server;
 
@@ -122,6 +132,9 @@ class ACeleryServer {
     Future<Response> guarded(Request request) async {
       final peer = _peerOf(request);
 
+      // The MCP server has its own rules, and none of them is pairing.
+      if (request.url.path == 'mcp') return _mcp(request, peer);
+
       // The pairing endpoints are the one thing an unpaired device may reach,
       // or it could never become paired.
       if (request.url.path.startsWith('acelery.pair')) {
@@ -133,10 +146,11 @@ class ACeleryServer {
           return route(request);
 
         case AccessRefused():
-          return Response.forbidden(
-            'aCelery is not shared on this network.',
-            headers: {'Content-Type': 'text/plain; charset=utf-8'},
-          );
+          return _notShared;
+
+        case AccessUnauthorized():
+          // check() never answers this; checkClient() does, for /mcp only.
+          return _notShared;
 
         case AccessPairingRequired(:final pairing):
           // A navigation gets a page it can act on; a subresource gets a
@@ -177,6 +191,47 @@ class ACeleryServer {
     // No connection info means an in-process call, which is as local as it
     // gets. Failing closed here would lock the app out of its own server.
     return InternetAddress.loopbackIPv4;
+  }
+
+  static Response get _notShared => Response.forbidden(
+        'aCelery is not shared on this network.',
+        headers: {'Content-Type': 'text/plain; charset=utf-8'},
+      );
+
+  /// `/mcp`, behind its own gate (doc/mcp-server.md §3, §4).
+  Future<Response> _mcp(Request request, InternetAddress peer) async {
+    // Browsers send Origin on every cross-origin request and on every POST,
+    // and MCP clients do not. Refusing it keeps pages — a site the user
+    // visits, or an app in aCelery's own WebView — from driving the server,
+    // which is the DNS-rebinding defence the specification requires.
+    if (request.headers.containsKey('origin')) {
+      return Response.forbidden(
+        'Requests from a web page cannot use the MCP server.',
+        headers: {'Content-Type': 'text/plain; charset=utf-8'},
+      );
+    }
+
+    switch (access.checkClient(request, peer)) {
+      case AccessAllowed():
+        final token = AccessControl.bearerOf(request)!;
+        return mcp.call(request, token: token);
+      case AccessRefused():
+        return _notShared;
+      case AccessUnauthorized():
+      case AccessPairingRequired():
+        return Response(
+          401,
+          body: jsonEncode({
+            'error': 'A client token is required. Create one in aCelery under '
+                'Network access, then send it as "Authorization: Bearer '
+                '<token>".',
+          }),
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'WWW-Authenticate': 'Bearer realm="aCelery"',
+          },
+        );
+    }
   }
 
   /// The two endpoints an unpaired device may reach.

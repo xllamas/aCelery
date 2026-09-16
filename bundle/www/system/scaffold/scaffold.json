@@ -1,0 +1,13 @@
+{
+  "entry": "main.js",
+  "namePattern": "^\\w{1,16}$",
+  "descriptionMax": 140,
+  "messages": {
+    "nameRequired": "A name is required",
+    "nameInvalid": "Letters, numbers and underscore only, 16 at most",
+    "descriptionTooLong": "140 characters at most"
+  },
+  "templates": {
+    "main.js": "main.js.template"
+  }
+}

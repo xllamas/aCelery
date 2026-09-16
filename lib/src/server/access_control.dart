@@ -82,6 +82,30 @@ class AccessControl {
     return Access.pairingRequired(_pendingFor(address));
   }
 
+  /// What should happen to a request for `/mcp`, from peer [address].
+  ///
+  /// Stricter than [check] in two ways (doc/mcp-server.md §4). Loopback is not
+  /// trusted: a page in the app's own WebView is loopback, and has no business
+  /// driving the MCP server. And the credential is a client token in an
+  /// `Authorization: Bearer` header — a browser's cookie does not count, so a
+  /// paired browser is not thereby an assistant.
+  ///
+  /// Nothing here raises a pairing request. An assistant cannot answer a
+  /// pairing page, and a prompt on the phone for every tokenless call would be
+  /// noise; a token is minted in the app instead.
+  Access checkClient(Request request, InternetAddress address) {
+    if (!address.isLoopback && !sharedOnNetwork) return const Access.refused();
+
+    final token = bearerOf(request);
+    final device = token == null ? null : _devices[token];
+    if (device == null || device.kind != DeviceKind.client) {
+      return const Access.unauthorized();
+    }
+    device.lastSeen = DateTime.now();
+    device.address = address.address;
+    return const Access.allowed();
+  }
+
   /// The pairing this address is already waiting on, or a new one.
   ///
   /// Reusing it matters: a browser loading a page makes many requests at once,
@@ -102,14 +126,29 @@ class AccessControl {
     return pairing;
   }
 
+  /// The browser token from the cookie. Only a browser's token counts here:
+  /// a client token in a cookie is still not a pairing.
   String? _tokenOf(Request request) {
     final header = request.headers['cookie'];
     if (header == null) return null;
     for (final part in header.split(';')) {
       final pair = part.trim().split('=');
-      if (pair.length == 2 && pair.first == cookieName) return pair.last;
+      if (pair.length == 2 && pair.first == cookieName) {
+        return _devices[pair.last]?.kind == DeviceKind.browser
+            ? pair.last
+            : null;
+      }
     }
     return null;
+  }
+
+  /// The token in an `Authorization: Bearer` header, if there is one.
+  static String? bearerOf(Request request) {
+    final header = request.headers['authorization'];
+    if (header == null) return null;
+    final match = RegExp(r'^Bearer\s+(\S+)\s*$', caseSensitive: false)
+        .firstMatch(header);
+    return match?.group(1);
   }
 
   // ---------------------------------------------------------------- pairing
@@ -132,6 +171,26 @@ class AccessControl {
       lastSeen: DateTime.now(),
     );
     pairing.resolve(token);
+    await save();
+    return token;
+  }
+
+  /// Mints a token for an MCP client, such as an assistant on a computer.
+  ///
+  /// There is no pairing page to approve: the user is holding the device and
+  /// asked for it, and sees the token once, to copy. It is revoked like any
+  /// other device.
+  Future<String> mintClient({String label = 'Assistant'}) async {
+    final token = _secret(32);
+    final now = DateTime.now();
+    _devices[token] = PairedDevice(
+      token: token,
+      address: '',
+      pairedAt: now,
+      lastSeen: now,
+      kind: DeviceKind.client,
+      label: label,
+    );
     await save();
     return token;
   }
@@ -229,6 +288,7 @@ sealed class Access {
   const factory Access.refused() = AccessRefused;
   const factory Access.pairingRequired(PendingPairing pairing) =
       AccessPairingRequired;
+  const factory Access.unauthorized() = AccessUnauthorized;
 }
 
 class AccessAllowed extends Access {
@@ -238,6 +298,12 @@ class AccessAllowed extends Access {
 /// Sharing is off, so a non-loopback peer has nothing to pair with.
 class AccessRefused extends Access {
   const AccessRefused();
+}
+
+/// A client call without a valid client token. Answered with 401 and no
+/// pairing, because a client cannot pair.
+class AccessUnauthorized extends Access {
+  const AccessUnauthorized();
 }
 
 class AccessPairingRequired extends Access {
@@ -275,6 +341,15 @@ class PendingPairing {
   }
 }
 
+/// What a token was issued to.
+enum DeviceKind {
+  /// A browser that paired through the pairing page, holding a cookie.
+  browser,
+
+  /// An MCP client given a token in the app, sending it as a bearer header.
+  client,
+}
+
 /// A device that has been approved.
 class PairedDevice {
   PairedDevice({
@@ -282,21 +357,31 @@ class PairedDevice {
     required this.address,
     required this.pairedAt,
     required this.lastSeen,
+    this.kind = DeviceKind.browser,
+    this.label,
   });
 
   final String token;
 
-  /// The address it paired from — a label, not the credential.
-  final String address;
+  /// The address it paired from, or last called from — a label, not the
+  /// credential.
+  String address;
 
   final DateTime pairedAt;
   DateTime lastSeen;
+
+  final DeviceKind kind;
+
+  /// What the user called it, for a client. Browsers are known by address.
+  final String? label;
 
   Map<String, Object?> toJson() => {
         'token': token,
         'address': address,
         'pairedAt': pairedAt.toIso8601String(),
         'lastSeen': lastSeen.toIso8601String(),
+        'kind': kind.name,
+        if (label != null) 'label': label,
       };
 
   static PairedDevice fromJson(Map<String, Object?> json) => PairedDevice(
@@ -304,5 +389,9 @@ class PairedDevice {
         address: json['address'] as String? ?? 'unknown',
         pairedAt: DateTime.parse(json['pairedAt'] as String),
         lastSeen: DateTime.parse(json['lastSeen'] as String),
+        kind: json['kind'] == DeviceKind.client.name
+            ? DeviceKind.client
+            : DeviceKind.browser,
+        label: json['label'] as String?,
       );
 }

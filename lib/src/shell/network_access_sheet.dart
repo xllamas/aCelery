@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../server/acelery_server.dart';
 import '../server/access_control.dart';
@@ -52,6 +53,23 @@ class _NetworkAccessSheetState extends State<NetworkAccessSheet> {
     if (mounted) setState(() => _busy = false);
   }
 
+  /// Mints a client token and shows it, once, to copy into an assistant.
+  Future<void> _connectAssistant() async {
+    final token = await _access.mintClient();
+    if (!mounted) return;
+    setState(() {});
+    // With sharing off the only way in is loopback, which on a phone means
+    // `adb forward` from a computer.
+    final host = _access.sharedOnNetwork && _address != null
+        ? _address!
+        : 'localhost';
+    await showAssistantToken(
+      context,
+      url: 'http://$host:${widget.server.boundPort}/mcp',
+      token: token,
+    );
+  }
+
   Future<void> _revoke(PairedDevice device) async {
     await _access.revoke(device.token);
     if (mounted) setState(() {});
@@ -95,6 +113,14 @@ class _NetworkAccessSheetState extends State<NetworkAccessSheet> {
                 'Open this in a browser on another device on the same network.',
               ),
             ),
+          ListTile(
+            leading: const Icon(Icons.smart_toy_outlined),
+            title: const Text('Connect an assistant'),
+            subtitle: const Text(
+              'Creates a key an AI assistant uses to build and edit apps here.',
+            ),
+            onTap: _connectAssistant,
+          ),
           const Divider(),
           ListTile(
             dense: true,
@@ -116,9 +142,18 @@ class _NetworkAccessSheetState extends State<NetworkAccessSheet> {
           ),
           for (final device in devices)
             ListTile(
-              leading: const Icon(Icons.devices),
-              title: Text(device.address),
-              subtitle: Text('Last seen ${_ago(device.lastSeen)}'),
+              leading: Icon(device.kind == DeviceKind.client
+                  ? Icons.smart_toy_outlined
+                  : Icons.devices),
+              title: Text(device.label ?? device.address),
+              subtitle: Text(switch (device) {
+                PairedDevice(kind: DeviceKind.client)
+                    when device.lastSeen == device.pairedAt =>
+                  'Not connected yet',
+                PairedDevice(kind: DeviceKind.client) =>
+                  '${device.address} · last seen ${_ago(device.lastSeen)}',
+                _ => 'Last seen ${_ago(device.lastSeen)}',
+              }),
               trailing: IconButton(
                 icon: const Icon(Icons.close),
                 tooltip: 'Revoke',
@@ -138,6 +173,64 @@ class _NetworkAccessSheetState extends State<NetworkAccessSheet> {
     if (gap.inDays < 1) return '${gap.inHours} h ago';
     return '${gap.inDays} d ago';
   }
+}
+
+/// Shows a freshly minted client token, the only time it is shown.
+Future<void> showAssistantToken(
+  BuildContext context, {
+  required String url,
+  required String token,
+}) {
+  final command = 'claude mcp add --transport http aCelery $url '
+      '--header "Authorization: Bearer $token"';
+  const mono = TextStyle(fontFamily: 'monospace', fontSize: 13);
+
+  Widget copyable(String label, String value) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(label)),
+              IconButton(
+                icon: const Icon(Icons.copy, size: 20),
+                tooltip: 'Copy',
+                onPressed: () => Clipboard.setData(ClipboardData(text: value)),
+              ),
+            ],
+          ),
+          SelectableText(value, style: mono),
+          const SizedBox(height: 12),
+        ],
+      );
+
+  return showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Connect an assistant'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            copyable('Address', url),
+            copyable('Key', token),
+            copyable('For Claude Code', command),
+            const Text(
+              'This key is shown once. Anyone holding it can read and change '
+              'your apps and databases, so revoke it here when you are done.',
+              style: TextStyle(fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Done'),
+        ),
+      ],
+    ),
+  );
 }
 
 /// The prompt a device's request raises.

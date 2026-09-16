@@ -1,61 +1,100 @@
 /**
- * What a new project is made of: its name rule, its manifest and its entry
- * module.
+ * What a new project is made of: its name rule, its manifest and its starting
+ * files.
  *
- * Deliberately free of imports, so everything that creates a project can share
- * it — the Code destination, and the MCP server (doc/mcp-server.md §2), which
- * loads this file straight from Node. An app a model creates is then the same
- * app the IDE would have made.
+ * The rules and templates are not written here. They are files in the bundle,
+ * under /system/scaffold/, because two languages create projects: this shell,
+ * and the MCP server inside the app, which is Dart and reads the same files
+ * from the installed tree (doc/mcp-server.md §7, P5). An app a model creates is
+ * then the same app the IDE would have made.
  */
 
-/** The module a new project's manifest names as its entry. */
-export const ENTRY = "main.js";
+/** Where the scaffold is served from, next to the shell itself. */
+export const SCAFFOLD_URL = "/system/scaffold/";
 
-/** A project name becomes a directory and a URL segment. */
-export const NAME_PATTERN = /^\w{1,16}$/;
-
-export const DESCRIPTION_MAX = 140;
+const PLACEHOLDER = /\{\{name\}\}/g;
 
 /**
- * Why a project name cannot be used, or null. Whether the name is taken is
- * the caller's to check, against whatever it has listed.
+ * The scaffold as functions, from `scaffold.json` and its template texts.
+ *
+ * @param {object} rules the parsed scaffold.json
+ * @param {Object<string,string>} templates file name → template text, for
+ *   every entry in `rules.templates`
  */
-export function nameProblem(name) {
-  const trimmed = (name ?? "").trim();
-  if (!trimmed) return "A name is required";
-  if (!NAME_PATTERN.test(trimmed)) {
-    return "Letters, numbers and underscore only, 16 at most";
-  }
-  return null;
+export function scaffoldFrom(rules, templates) {
+  const pattern = new RegExp(rules.namePattern);
+  const { messages } = rules;
+
+  return {
+    /** The module a new project's manifest names as its entry. */
+    entry: rules.entry,
+
+    /**
+     * Why a project name cannot be used, or null. Whether the name is taken is
+     * the caller's to check, against whatever it has listed.
+     */
+    nameProblem(name) {
+      const trimmed = (name ?? "").trim();
+      if (!trimmed) return messages.nameRequired;
+      if (!pattern.test(trimmed)) return messages.nameInvalid;
+      return null;
+    },
+
+    /** Why a description cannot be used, or null. */
+    descriptionProblem(description) {
+      return (description ?? "").length <= rules.descriptionMax
+        ? null
+        : messages.descriptionTooLong;
+    },
+
+    /** The name actually used: trimmed and capitalised, as it always was. */
+    projectName(name) {
+      const trimmed = name.trim();
+      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    },
+
+    /**
+     * Every file of a new project, as name → text, manifest first. `name` is
+     * the name actually used.
+     */
+    files(name, description) {
+      const out = {
+        "acelery_app.json": JSON.stringify({
+          name, description: description ?? "", entry: rules.entry,
+        }),
+      };
+      for (const file of Object.keys(rules.templates)) {
+        out[file] = templates[file].replace(PLACEHOLDER, name);
+      }
+      return out;
+    },
+  };
 }
 
-/** Why a description cannot be used, or null. */
-export function descriptionProblem(description) {
-  return (description ?? "").length <= DESCRIPTION_MAX
-    ? null
-    : `${DESCRIPTION_MAX} characters at most`;
-}
+let loading = null;
 
-/** The name actually used: trimmed and capitalised, as it always was. */
-export function projectName(name) {
-  const trimmed = name.trim();
-  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
-}
-
-/** `acelery_app.json` for a new project, as the text written to disk. */
-export function manifestText(name, description) {
-  return JSON.stringify({ name, description, entry: ENTRY });
-}
-
-/** The entry module of a brand-new project, which already runs. */
-export function entryModule(name) {
-  return `import { html, render, Panel } from "acelery/ui.js";
-
-export default function main() {
-  render(html\`
-    <\${Panel} title="${name}">
-      <p>Your app starts here.</p>
-    <//>\`, document.body);
-}
-`;
+/**
+ * Fetches the scaffold once per page. A failure is not cached, so the next
+ * caller tries again.
+ */
+export function loadScaffold() {
+  loading ??= (async () => {
+    const text = async (file) => {
+      const response = await fetch(SCAFFOLD_URL + file);
+      if (!response.ok) {
+        throw new Error(`${SCAFFOLD_URL}${file}: ${response.status}`);
+      }
+      return response.text();
+    };
+    const rules = JSON.parse(await text("scaffold.json"));
+    const templates = {};
+    for (const [file, source] of Object.entries(rules.templates)) {
+      templates[file] = await text(source);
+    }
+    return scaffoldFrom(rules, templates);
+  })().catch((e) => {
+    loading = null;
+    throw e;
+  });
+  return loading;
 }

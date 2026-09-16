@@ -1,0 +1,8 @@
+import { html, render, Panel } from "acelery/ui.js";
+
+export default function main() {
+  render(html`
+    <${Panel} title="{{name}}">
+      <p>Your app starts here.</p>
+    <//>`, document.body);
+}

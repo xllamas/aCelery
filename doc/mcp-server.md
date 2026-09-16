@@ -190,6 +190,7 @@ without new instrumentation.
 ## 8. Phasing
 
 - **M1 — authoring.** P1, the authoring and data tools, and the guide resource.
+  *Done, 2026-09-16 (§15). M1 also took P5 and the token half of P2.*
   Usable from Claude Code over `adb forward`, with a token.
 - **M2 — the network.** P2, the Network access UI, and the documented
   `mcp-remote` line for Claude Desktop.
@@ -305,9 +306,132 @@ reproduced over HTTP by a failing test before it was fixed.
 - **Scaffold.** `web/src/ide/scaffold.js` holds `ENTRY`, `NAME_PATTERN`,
   `nameProblem`, `descriptionProblem`, `projectName`, `manifestText` and
   `entryModule`; `store.js` and `code_screen.js` use it, with the rules and
-  messages unchanged. Its import-free shape was for Node and is now
-  superseded by P5.
+  messages unchanged. Its import-free shape was for Node, and P5 replaced it
+  in M1 (§15).
 - **Bundle.** `bundleVersion` is `1.6.3+mcp-m0`, with `ide.js` and
   `assets/aCelery.zip` rebuilt.
 - **Results.** Dart 178 pass, node 105 pass, `flutter analyze` clean. Not
   checked on a device.
+
+## 15. M1: implemented (2026-09-16)
+
+`/mcp` serves MCP from inside the app. Claude Code connected to it on the
+emulator over `adb forward`.
+
+**Where M1 departed from the plan above:**
+
+- **P5 moved into M1.** `create_app` needs the scaffold, so the scaffold is now
+  in the bundle.
+  - `www/system/scaffold/` holds two files: `scaffold.json`, with the entry,
+    the name pattern, the description limit and the messages; and
+    `main.js.template`, with a `{{name}}` placeholder.
+  - `web/src/ide/scaffold.js` is `scaffoldFrom(rules, templates)` plus
+    `loadScaffold()`. The IDE fetches the files over HTTP, and Code loads
+    them before the New project sheet can open.
+  - `lib/src/mcp/scaffold.dart` reads the same files from the installed tree.
+- **The token half of P2 moved into M1.** M1 promised "with a token", and a
+  token needs somewhere to come from.
+  - `AccessControl.mintClient()` creates a token. `checkClient()` gates `/mcp`,
+    and `bearerOf()` reads the header.
+  - `PairedDevice` gained `kind` (`browser` or `client`) and `label`.
+  - Network access gained a "Connect an assistant" row. It mints a key and
+    shows the address, the key and the `claude mcp add` line once, each with a
+    copy button. Clients appear in the device list and are revoked like
+    browsers.
+  - Still for M2: a real phone over Wi-Fi, the `mcp-remote` line for Claude
+    Desktop, and naming a client.
+- **Two extra tools.** `read_file` reads one file without the whole app.
+  `get_guide` returns the guide to clients that cannot read resources.
+- **File tools use `dart:io`, not `FileBridge`.** The bridge swallows failures
+  into empty strings, as the Java original did, but a tool has to say why a
+  write failed. The confinement is the same `ACeleryPaths.isInside` check,
+  applied to the app's own folder. The SQL tools do go through `SqlBridge`.
+
+**What the gate does** (`ACeleryServer._mcp`):
+
+- It refuses any request with an `Origin` header (403), before looking at the
+  token.
+- It requires a client token as a bearer header on loopback too. A browser's
+  cookie does not count, and neither does a browser's token sent as a bearer.
+- It gives a network peer 403 while sharing is off.
+- It answers 401 with `WWW-Authenticate: Bearer`, and never raises a pairing
+  prompt.
+- A client token in a cookie is not a pairing either.
+
+**What the transport does** (`lib/src/mcp/transport.dart`):
+
+- **Requests.** It accepts one JSON response per POST. Batches get 400, a
+  non-JSON content type gets 415, and a body over 8 MB gets 413.
+- **Sessions.** `initialize` issues `Mcp-Session-Id`. A missing session gets
+  400. An unknown session, or one opened with a different token, gets 404.
+  `DELETE` ends a session.
+- **Versions.** It supports `2025-11-25`, `2025-06-18` and `2025-03-26`, and
+  refuses an unsupported `MCP-Protocol-Version` header.
+- **Other messages.** GET gets 405. Notifications and client responses get
+  202.
+- **Lifetime.** Sessions live on the `ACeleryServer`, so they survive the
+  rebind when sharing is toggled. At most 32 are kept, and the least recently
+  used goes first.
+
+**Tools and data.**
+
+- **Stale writes.** `write_file` refuses to replace an existing file without
+  `expected_mtime`, and refuses if the mtime moved.
+- **Read-only queries.** `query_db` opens a read-only handle (M0, S3), returns
+  at most 200 rows with `rowCount` and `truncated`, and describes BLOBs by
+  size.
+- **Change counts.** `exec_db` measures `total_changes()` and
+  `last_insert_rowid()` before and after the statement. On Android, sqflite
+  reported `CREATE TABLE` on a fresh database as one change with rowid 1. The
+  desktop test engine never showed that, and the emulator did.
+- **ATTACH.** Both SQL tools refuse `ATTACH` and `VACUUM INTO`, with literals
+  and comments stripped first.
+- **Tool failures** come back as `isError` results, and only an unknown tool
+  is a protocol error.
+- **The log.** Every call is appended to `log/mcp.log`, one tab-separated line
+  each, rolling over at 1 MB.
+- **Resources.** `acelery://guide` is `www/system/mcp/guide.md`.
+  `acelery://apps/{app}/{+path}` reads any app file, up to 2 MB. Prompt
+  `create_acelery_app(idea)` embeds the guide.
+
+**Found, not fixed:**
+
+- **ATTACH on the page bridge.** `/android.itf` still lets a page `ATTACH` a
+  database by absolute path. Over HTTP on the desktop, `opt=sql&action=run`
+  with `attach database '<tmp>/outside.db' as o` and then `create table o.t`
+  both answered 200, and the file existed outside the tree. That gets around
+  M0's S1. The MCP tools refuse it; the bridge does not.
+
+**Tests.**
+
+- `test/mcp_test.dart`, 51 tests: transport, authorization, the gate from a
+  network peer, the authoring tools, the data tools, `refuseAttach`, and
+  resources and prompts.
+- `test/mcp_scaffold_test.dart` runs the same names and descriptions through
+  Dart and through `scaffold.js` under node, and compares the apps they make.
+  It is skipped without node.
+- `web/test/ide_shell.test.js` creates a project through the sheet from the
+  fetched scaffold.
+- Two tests were confirmed to fail without their fix: the ATTACH test with
+  the guard removed, and the scaffold comparison with Dart's description
+  default changed.
+
+**Bundle.** `bundleVersion` is `1.6.4+mcp-m1`. `ide.js` and
+`assets/aCelery.zip` were rebuilt.
+
+**Results.**
+
+- Dart 230 pass, node 105 pass, and `flutter analyze` is clean.
+- **Emulator** (Android API 36, a debug APK, `adb forward`):
+  - Without a token, `/mcp` answered 401.
+  - "Connect an assistant" showed the key.
+  - With the key, `initialize` agreed `2025-06-18`, with version
+    `1.6.4+mcp-m1`, and `tools/list` listed 11 tools.
+  - `create_app`, `list_apps`, `read_file`, `exec_db` and `query_db` worked.
+    `query_db` refused an INSERT with `SQLITE_READONLY`.
+  - `resources/read acelery://guide` worked, and `log/mcp.log` recorded each
+    call.
+  - `claude mcp list` reported the server `✔ Connected`.
+  - The test app and databases were deleted afterwards.
+- **Not done:** a revoke on the device (it is covered in tests), a real phone
+  over Wi-Fi, Claude Desktop, and iOS.
