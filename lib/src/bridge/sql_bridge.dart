@@ -108,6 +108,36 @@ class SqlBridge {
         : null;
   }
 
+  /// Why [statement] may not run here, or null.
+  ///
+  /// `ATTACH` and `VACUUM INTO` name a file by path inside the SQL, which
+  /// [_resolve]'s confinement never sees: `ATTACH '/anywhere/x.db'` then
+  /// `CREATE TABLE` made a database outside the aCelery tree, from any page.
+  /// SQLite's authorizer would be the proper place to stop them, and sqflite
+  /// does not expose it, so the text is checked instead — with string
+  /// literals, quoted identifiers and comments removed first, so that a value
+  /// or a column that merely says "attach" does not trip it.
+  static String? fileProblem(String statement) {
+    final code = statement.replaceAll(
+      RegExp(
+        r"'(?:[^']|'')*'"
+        r'|"(?:[^"]|"")*"'
+        r'|`(?:[^`]|``)*`'
+        r'|\[[^\]]*\]'
+        r'|--[^\n]*'
+        r'|/\*[\s\S]*?(?:\*/|$)',
+      ),
+      ' ',
+    );
+    if (RegExp(r'\battach\b', caseSensitive: false).hasMatch(code) ||
+        RegExp(r'\bvacuum\b[\s\S]*\binto\b', caseSensitive: false)
+            .hasMatch(code)) {
+      return 'ATTACH and VACUUM INTO are not allowed: they reach files '
+          'outside db/. Open each database by name instead.';
+    }
+    return null;
+  }
+
   /// Returns the new handle, or -1 if the database could not be opened.
   ///
   /// A [readOnly] handle cannot write, and never creates a missing file —
@@ -158,6 +188,8 @@ class SqlBridge {
   }
 
   Future<void> exec(int handle, String query) async {
+    // Refused as quietly as every other failure on this route.
+    if (fileProblem(query) != null) return;
     try {
       await _databases[handle]?.execute(query);
     } on DatabaseException {
@@ -167,6 +199,7 @@ class SqlBridge {
 
   /// Returns the inserted rowid, or -1 on error.
   Future<int> insert(int handle, String query) async {
+    if (fileProblem(query) != null) return -1;
     try {
       final db = _databases[handle];
       if (db == null) return -1;
@@ -178,6 +211,7 @@ class SqlBridge {
 
   /// Returns a cursor handle, or -1 on error.
   Future<int> select(int handle, String query) async {
+    if (fileProblem(query) != null) return -1;
     try {
       final db = _databases[handle];
       if (db == null) return -1;
@@ -206,7 +240,7 @@ class SqlBridge {
     String sql, [
     List<Object?> args = const [],
   ]) async {
-    final db = _requireDb(handle);
+    final db = _requireDb(handle, sql);
     try {
       return await db.rawQuery(sql, _bind(args));
     } on DatabaseException catch (e) {
@@ -220,7 +254,7 @@ class SqlBridge {
     String sql, [
     List<Object?> args = const [],
   ]) async {
-    final db = _requireDb(handle);
+    final db = _requireDb(handle, sql);
     try {
       return await db.rawUpdate(sql, _bind(args));
     } on DatabaseException catch (e) {
@@ -234,7 +268,7 @@ class SqlBridge {
     String sql, [
     List<Object?> args = const [],
   ]) async {
-    final db = _requireDb(handle);
+    final db = _requireDb(handle, sql);
     try {
       return await db.rawInsert(sql, _bind(args));
     } on DatabaseException catch (e) {
@@ -242,7 +276,10 @@ class SqlBridge {
     }
   }
 
-  Database _requireDb(int handle) {
+  /// The handle's database, for a statement allowed to run on it.
+  Database _requireDb(int handle, String sql) {
+    final problem = fileProblem(sql);
+    if (problem != null) throw SqlError(problem);
     final db = _databases[handle];
     if (db == null) throw SqlError('no open database with handle $handle');
     return db;

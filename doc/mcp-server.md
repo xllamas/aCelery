@@ -394,18 +394,28 @@ emulator over `adb forward`.
   `acelery://apps/{app}/{+path}` reads any app file, up to 2 MB. Prompt
   `create_acelery_app(idea)` embeds the guide.
 
-**Found, not fixed:**
+**Found, then fixed:**
 
-- **ATTACH on the page bridge.** `/android.itf` still lets a page `ATTACH` a
-  database by absolute path. Over HTTP on the desktop, `opt=sql&action=run`
-  with `attach database '<tmp>/outside.db' as o` and then `create table o.t`
-  both answered 200, and the file existed outside the tree. That gets around
-  M0's S1. The MCP tools refuse it; the bridge does not.
+- **ATTACH on the page bridge.** `/android.itf` let a page `ATTACH` a database
+  by absolute path, which got around M0's S1.
+  - Over HTTP on the desktop, `opt=sql&action=run` with
+    `attach database '<tmp>/outside.db' as o` and then `create table o.t` both
+    answered 200, and the file existed outside the tree.
+  - The check is now `SqlBridge.fileProblem`, applied in the bridge to every
+    route that runs SQL. The MCP tools get it from there.
+    - `run`, `query` and `insertrow` answer 500, with a message.
+    - The cursor routes fail the way they always have: `exec` does nothing,
+      `insert` returns rowid -1, and `select` answers 500.
+  - `test/bridge_test.dart`, group `confinement: SQL that names a file`. Five
+    of its six tests failed before the fix. The sixth, a value that only says
+    "attach", passed both before and after.
+  - Nothing in the bundle uses ATTACH or VACUUM INTO. A user typing either in
+    the Data screen's SQL tab now gets the message.
 
 **Tests.**
 
 - `test/mcp_test.dart`, 51 tests: transport, authorization, the gate from a
-  network peer, the authoring tools, the data tools, `refuseAttach`, and
+  network peer, the authoring tools, the data tools, `SqlBridge.fileProblem`, and
   resources and prompts.
 - `test/mcp_scaffold_test.dart` runs the same names and descriptions through
   Dart and through `scaffold.js` under node, and compares the apps they make.
@@ -421,7 +431,8 @@ emulator over `adb forward`.
 
 **Results.**
 
-- Dart 230 pass, node 105 pass, and `flutter analyze` is clean.
+- Dart 230 pass, node 105 pass, and `flutter analyze` is clean. After the
+  ATTACH fix, Dart 236 pass.
 - **Emulator** (Android API 36, a debug APK, `adb forward`):
   - Without a token, `/mcp` answered 401.
   - "Connect an assistant" showed the key.

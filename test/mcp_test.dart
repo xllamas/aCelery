@@ -4,8 +4,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:acelery/src/mcp/data_tools.dart';
-import 'package:acelery/src/mcp/tool.dart';
+import 'package:acelery/src/bridge/sql_bridge.dart';
 import 'package:acelery/src/paths.dart';
 import 'package:acelery/src/server/access_control.dart';
 import 'package:acelery/src/server/acelery_server.dart';
@@ -641,7 +640,7 @@ void main() {
     });
   });
 
-  group('refuseAttach', () {
+  group('SqlBridge.fileProblem', () {
     test('sees through case, comments and spacing', () {
       for (final sql in [
         "ATTACH 'x.db' AS x",
@@ -650,8 +649,7 @@ void main() {
         "vacuum into '/tmp/x.db'",
         "VACUUM\nmain\nINTO 'x'",
       ]) {
-        expect(() => refuseAttach(sql), throwsA(isA<ToolFailure>()),
-            reason: sql);
+        expect(SqlBridge.fileProblem(sql), isNotNull, reason: sql);
       }
     });
 
@@ -664,7 +662,7 @@ void main() {
         "insert into t values ('vacuum the car into the garage')",
         'select attachment from mail',
       ]) {
-        expect(() => refuseAttach(sql), returnsNormally, reason: sql);
+        expect(SqlBridge.fileProblem(sql), isNull, reason: sql);
       }
     });
   });

@@ -591,6 +591,66 @@ void main() {
     });
   });
 
+  group('confinement: SQL that names a file', () {
+    // ATTACH and VACUUM INTO take a path inside the statement, which the path
+    // checks on opendb never see. `attach database '<anywhere>' as o` and then
+    // `create table o.t` created a database outside the tree — S1 again, one
+    // layer down. Every route that runs SQL is covered, because a page can
+    // reach all of them.
+    late String outside;
+    late String handle;
+
+    setUp(() async {
+      outside = '${tmp.path}/outside.db';
+      handle = (await get('opt=sql&action=opendb&path=x.db'))['handle'] as String;
+    });
+
+    Future<http.Response> run(String action, String sql) =>
+        postJson('opt=sql&action=$action',
+            {'handle': int.parse(handle), 'sql': sql, 'args': <Object?>[]});
+
+    for (final action in ['run', 'query', 'insertrow']) {
+      test('$action refuses ATTACH, with a message', () async {
+        final response = await run(action, "attach database '$outside' as o");
+        expect(response.statusCode, 500);
+        expect(response.body, contains('ATTACH'));
+        await run('run', 'create table o.t (a)');
+        expect(File(outside).existsSync(), isFalse);
+      });
+    }
+
+    test('run refuses VACUUM INTO', () async {
+      await run('run', 'create table t (a)');
+      final response = await run('run', "vacuum into '$outside'");
+      expect(response.statusCode, 500);
+      expect(File(outside).existsSync(), isFalse);
+    });
+
+    test('the cursor routes refuse it too', () async {
+      await raw('opt=sql&action=exec&handle=$handle'
+          '&query=${enc("attach database '$outside' as o")}');
+      await raw('opt=sql&action=exec&handle=$handle'
+          '&query=${enc('create table o.t (a)')}');
+      expect(File(outside).existsSync(), isFalse, reason: 'exec');
+
+      final insert = await get('opt=sql&action=insert&handle=$handle'
+          '&query=${enc("attach '$outside' as o")}');
+      expect(insert['rowid'], '-1');
+
+      final select = await raw('opt=sql&action=select&handle=$handle'
+          '&query=${enc("attach '$outside' as o")}');
+      expect(select.statusCode, 500);
+      expect(File(outside).existsSync(), isFalse);
+    });
+
+    test('a value or a name that says attach is still fine', () async {
+      await run('run', 'create table notes (body text, attachment text)');
+      final response = await run('run',
+          "insert into notes (body, attachment) values ('attach the file', '')");
+      expect(response.statusCode, 200, reason: response.body);
+    });
+  });
+
   group('opt=sql — read-only handles', () {
     // What an MCP server's query tool opens, so that "look at the data" cannot
     // change it (§6, S3).

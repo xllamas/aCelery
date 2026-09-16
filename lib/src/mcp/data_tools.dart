@@ -85,7 +85,6 @@ List<McpTool> dataTools(ACeleryPaths paths, SqlBridge sql) {
         final name = _databaseName(args.string('database'));
         final statement = args.string('sql');
         final params = _params(args);
-        refuseAttach(statement);
 
         if (!File('${paths.dbRoot}$name').existsSync()) {
           throw ToolFailure('No database named "$name". list_databases shows '
@@ -128,7 +127,6 @@ List<McpTool> dataTools(ACeleryPaths paths, SqlBridge sql) {
         final name = _databaseName(args.string('database'));
         final statement = args.string('sql');
         final params = _params(args);
-        refuseAttach(statement);
 
         final handle = await sql.openDb(name, null);
         if (handle < 0) throw ToolFailure('"$name" could not be opened');
@@ -182,35 +180,6 @@ List<Object?> _params(ToolArgs args) {
     }
   }
   return params;
-}
-
-/// Refuses `ATTACH` and `VACUUM INTO`.
-///
-/// Both name a file by path inside the SQL, which the bridge's confinement
-/// never sees: `ATTACH '/anywhere/x.db'` creates or opens a database outside
-/// the aCelery tree, and `VACUUM INTO` writes one. SQLite's authorizer would be
-/// the proper place to stop them, and sqflite does not expose it, so the text
-/// is checked instead — with string literals, quoted identifiers and comments
-/// removed first, so that a value or a column that merely says "attach" does
-/// not trip it.
-void refuseAttach(String statement) {
-  final code = statement.replaceAll(
-    RegExp(
-      r"'(?:[^']|'')*'"
-      r'|"(?:[^"]|"")*"'
-      r'|`(?:[^`]|``)*`'
-      r'|\[[^\]]*\]'
-      r'|--[^\n]*'
-      r'|/\*[\s\S]*?(?:\*/|$)',
-    ),
-    ' ',
-  );
-  if (RegExp(r'\battach\b', caseSensitive: false).hasMatch(code) ||
-      RegExp(r'\bvacuum\b[\s\S]*\binto\b', caseSensitive: false)
-          .hasMatch(code)) {
-    throw ToolFailure('ATTACH and VACUUM INTO are not allowed: they reach '
-        'files outside db/. Query each database by name instead.');
-  }
 }
 
 /// A row as JSON: BLOBs have no JSON form, so they are described instead.
