@@ -332,6 +332,10 @@ through `action=raw`, and no resize by default.
     is applied the same way the page shows them.
   - `acelery/file.js`: `writeBytes` and `url`; `bridge.js` gained
     `postBytes`.
+- **`FileButton`** (`web/src/ui/file_button.js`), exported from `ui.js`: a
+  `<label>` styled as a Bootstrap button around a visually hidden file input,
+  calling `onFiles(files)`. Added after the iOS run (§13); it is what an app
+  should use where a button opens the picker.
 - **`ImageCropper`** (`web/src/ui/crop.js`), exported from `ui.js`:
   - A modal that is full screen on a phone, with a zoom slider as well as
     pinch, and Cancel / Use.
@@ -422,3 +426,36 @@ chose the design (§0).
   2071 px, ending at y 2359, against a navigation bar from y 2361. Under
   Darkly the strip turned dark and the handle light. Xavier confirmed the
   fix on the Xiaomi.
+
+## 13. iOS (2026-09-17)
+
+Run on the iPhone 17 Pro simulator, iOS 26.2, from
+`flutter build ios --simulator --debug`. `pod install` added
+`image_picker_ios`; nothing else was needed, since WKWebView answers a file
+input itself.
+
+**Found: the picker menu opened in the corner.** WebKit shows Photo Library /
+Take Photo / Choose File anchored to the input the user touched. `pickFiles`
+creates an input and clicks it from script, and the menu then opened in the
+page's top-left corner, far from the button that asked for it.
+
+- Positioning the hidden input under the last tap did not help: measured
+  through `eval_js`, the input sat exactly at the tap (250, 550) and the menu
+  still opened at the corner. That attempt was reverted.
+- A `<label>` around a real input, tapped by the user, anchors the menu beside
+  it. That is `FileButton`, and the Example now uses it for all four pickers.
+  `pickFiles` and `pickImages` stay for pickers opened from code, with the
+  corner noted in the guide.
+
+**Verified on the simulator.** Native menus and sheets ignore synthesized
+clicks, so Xavier tapped those.
+
+- The menu opened under the button that asked for it.
+- Photo Library, then the crop dialog, then Use, stored an 800×800 JPEG.
+- Add several picked two photos, each shrunk to 1600 on its long side
+  (1600×1063 and 1600×1200).
+- Pick a file → Choose File picked a document.
+- Xavier reported the whole screen worked.
+
+**Not verified on iOS:** the camera (the simulator has none), cancelling,
+HEIC, and a physical iPhone.

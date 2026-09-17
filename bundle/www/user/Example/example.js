@@ -24,7 +24,7 @@
 import { openDB } from "acelery/sql.js";
 import { saveFile, closeApp } from "acelery/export.js";
 import * as file from "acelery/file.js";
-import { pickFiles, pickImages, shrinkImage } from "acelery/picker.js";
+import { shrinkImage } from "acelery/picker.js";
 /* Charts are a separate import because Chart.js is 68 KB gzipped and most apps
    never draw one — an app pays for it only by asking. */
 import { Chart, fromRows } from "acelery/chart.js";
@@ -34,7 +34,7 @@ import {
   Alert, Button, ButtonGroup, ListGroup, Modal, Tab, Tabs,
   Row, Col, Panel,
   Form, Input, Select, TextArea, CheckBox,
-  TableMaint, ThemeSelect, ImageCropper,
+  TableMaint, ThemeSelect, ImageCropper, FileButton,
   notEmpty, email,
 } from "acelery/ui.js";
 
@@ -256,18 +256,9 @@ function PhotoDemo() {
     }
   }
 
-  /* Browsers open a picker only from a tap, so these run in click handlers. */
-  const takeOrChoose = (camera) => run(async () => {
-    const [photo] = await pickImages({ camera });
-    if (photo) setCropping(photo);
-  });
-
-  const addSeveral = () => run(async () => {
-    const chosen = await pickImages({ multiple: true });
+  const addSeveral = (chosen) => run(async () => {
     for (const photo of chosen) await store(await shrinkImage(photo));
-    if (chosen.length) {
-      setStatus({ variant: "success", text: `Added ${chosen.length} photos.` });
-    }
+    setStatus({ variant: "success", text: `Added ${chosen.length} photos.` });
   });
 
   const remove = (entry) => run(async () => {
@@ -275,10 +266,6 @@ function PhotoDemo() {
     await handle.delete();
   });
 
-  const inspect = () => run(async () => {
-    const [chosen] = await pickFiles();
-    if (chosen) setPicked(chosen);
-  });
 
   return html`
     <${Panel} title="Photos">
@@ -287,11 +274,12 @@ function PhotoDemo() {
         <code>files/${PHOTOS}</code>.
       </p>
       <div class="d-flex flex-wrap gap-2 mb-3">
-        <${Button} variant="primary" onClick=${() => takeOrChoose(true)}>Take a photo<//>
-        <${Button} variant="outline-primary" onClick=${() => takeOrChoose(false)}>
-          Choose a photo
-        <//>
-        <${Button} variant="outline-secondary" onClick=${addSeveral}>Add several<//>
+        <${FileButton} accept="image/*" capture="environment"
+          onFiles=${([photo]) => setCropping(photo)}>Take a photo<//>
+        <${FileButton} accept="image/*" variant="outline-primary"
+          onFiles=${([photo]) => setCropping(photo)}>Choose a photo<//>
+        <${FileButton} accept="image/*" multiple variant="outline-secondary"
+          onFiles=${addSeveral}>Add several<//>
       </div>
       ${status
         ? html`<${Alert} variant=${status.variant}>${status.text}<//>`
@@ -314,7 +302,8 @@ function PhotoDemo() {
 
     <${Panel} title="Any file" className="mt-3">
       <p>Pick any file to see what the app receives. Nothing is stored.</p>
-      <${Button} variant="outline-primary" onClick=${inspect}>Pick a file<//>
+      <${FileButton} variant="outline-primary"
+        onFiles=${([file]) => setPicked(file)}>Pick a file<//>
       ${picked
         ? html`<p class="mt-3 mb-0">
             <strong>${picked.name}</strong>, ${picked.type || "unknown type"},

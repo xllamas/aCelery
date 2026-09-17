@@ -10,6 +10,11 @@
  *
  * Browsers only open a picker in answer to a tap or a click, so call these
  * from an event handler, not from `main` or an effect.
+ *
+ * Prefer `FileButton` from acelery/ui.js where the picker opens from a
+ * button. These functions click an input from script, and on iOS WebKit then
+ * opens its Photo Library / Take Photo / Choose File menu in the page's
+ * top-left corner rather than beside the button.
  */
 
 /**

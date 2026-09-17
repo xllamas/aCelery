@@ -55,7 +55,7 @@ nothing else: there is no npm, and the phone may well be offline.
 
 | Import | What it gives you |
 |---|---|
-| `acelery/ui.js` | rendering, hooks, components, forms, theming |
+| `acelery/ui.js` | rendering, hooks, components, forms, theming, FileButton |
 | `acelery/sql.js` | SQLite: `openDB`, `deleteDB` |
 | `acelery/file.js` | files under the aCelery folder |
 | `acelery/picker.js` | let the user pick files and photos; crop and shrink pictures |
@@ -195,9 +195,17 @@ import * as file from "acelery/file.js";
 import { ImageCropper } from "acelery/ui.js";
 ```
 
+- **`<${FileButton} accept="image/*" onFiles=${(files) => …}>Choose<//>`** is
+  the way to offer a picker from a button: `accept`, `multiple`, `capture`
+  ("environment" for the camera), and the Bootstrap `variant` and `size`. Use
+  it rather than the functions below where you can. It is a real file input
+  inside the button, and iOS puts its Photo Library / Take Photo / Choose File
+  menu next to the button rather than in the page's corner.
 - `pickImages({ multiple?, camera? })` and `pickFiles({ accept?, multiple?,
-  capture? })` return `File[]`, empty when the user cancels. **Call them from
-  a click handler**: browsers open a picker only in answer to a tap.
+  capture? })` open the same pickers from code, for when there is no button of
+  your own — a menu item, say. They return `File[]`, empty when the user
+  cancels. **Call them from a click handler**: browsers open a picker only in
+  answer to a tap.
 - `shrinkImage(file, { maxSide = 1600, type = "image/jpeg", quality })` and
   `cropImage(file, area, { maxSide = 1024, … })` return a smaller `Blob`. A
   camera photo is several MB; shrink or crop before storing.

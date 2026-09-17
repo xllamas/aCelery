@@ -70,3 +70,14 @@
     background-color: transparent;
   }
 }
+
+/* FileButton (acelery/ui.js): a label styled as a button around a visually
+   hidden file input. The input takes keyboard focus, so the ring is drawn on
+   the label. */
+.ac-file-button {
+  cursor: pointer;
+}
+
+.ac-file-button:focus-within {
+  box-shadow: var(--bs-btn-focus-box-shadow);
+}

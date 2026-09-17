@@ -86,6 +86,22 @@ were tapped by hand.
   edits. Check on a device before treating it as a bug; it may be WKWebView and
   Flutter both adjusting for the keyboard.
 
+## Pickers and cropping (2026-09-17)
+
+`doc/pickers-evaluation.md` §13 has the detail. In short: WKWebView answers
+`<input type="file">` itself, so iOS needed only the camera, microphone and
+photo library usage descriptions in `Info.plist`, plus `image_picker_ios` in
+`Podfile.lock` from `pod install`.
+
+WebKit anchors its Photo Library / Take Photo / Choose File menu to the input
+the user touched, and opened it in the page's corner for an input a script
+clicks. `FileButton` in `acelery/ui.js` is the answer: a label styled as a
+button around a real input.
+
+Verified on the simulator, with Xavier tapping the native menus: choosing a
+photo, cropping it, storing it, several at once, and picking a document. The
+camera has no simulator equivalent.
+
 ## Not verified
 
 - A physical iPhone or iPad, including the local-network prompt and another

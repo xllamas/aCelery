@@ -309,6 +309,34 @@ test("ImageCropper opens while it has a picture, and Cancel asks to close", asyn
   host.remove();
 });
 
+test("FileButton is a label around a real file input, so a tap lands on the input", async () => {
+  const chosen = [];
+  const host = mount(html`
+    <${ui.FileButton} accept="image/*" capture="environment" variant="outline-primary"
+      onFiles=${(files) => chosen.push(files)}>Take a photo<//>`);
+  await flush();
+
+  const label = host.querySelector("label");
+  const input = label.querySelector("input[type=file]");
+  assert.ok(input, "the input is inside the label, not clicked from script");
+  assert.match(label.className, /\bbtn btn-outline-primary\b/);
+  assert.equal(label.textContent.trim(), "Take a photo");
+  assert.equal(input.getAttribute("accept"), "image/*");
+  assert.equal(input.getAttribute("capture"), "environment");
+  assert.equal(input.multiple, false);
+  assert.match(input.className, /visually-hidden/, "hidden, but still focusable");
+
+  const photo = new dom.window.File(["x"], "p.jpg", { type: "image/jpeg" });
+  Object.defineProperty(input, "files", { value: [photo], configurable: true });
+  fire(input, "change");
+  assert.deepEqual(chosen.map((f) => f.map((x) => x.name)), [["p.jpg"]]);
+
+  Object.defineProperty(input, "files", { value: [], configurable: true });
+  fire(input, "change");
+  assert.equal(chosen.length, 1, "a cancelled pick is not reported");
+  render(null, host);
+});
+
 test("useDismiss fires for a tap outside and not for one inside", async () => {
   // The hook the overlaid navbar leans on: an inline menu left open is in the
   // way, an overlaid one hides what is under it.
@@ -322,6 +350,9 @@ test("useDismiss fires for a tap outside and not for one inside", async () => {
     return html`<div ref=${ref}><button>inside</button></div>`;
   }
   render(html`<${Panel} />`, host);
+  // Two ticks: the render, then the effect preact schedules after it, which
+  // is what adds the listener.
+  await flush();
   await flush();
 
   const inside = host.querySelector("button");
@@ -348,11 +379,13 @@ test("useDismiss listens only while active, and unsubscribes", async () => {
 
   render(html`<${Panel} open=${false} />`, host);
   await flush();
+  await flush();
   document.body.dispatchEvent(
     new dom.window.Event("pointerdown", { bubbles: true }));
   assert.equal(dismissed, 0, "a closed panel must not listen");
 
   render(html`<${Panel} open=${true} />`, host);
+  await flush();
   await flush();
   document.body.dispatchEvent(
     new dom.window.Event("pointerdown", { bubbles: true }));
@@ -361,6 +394,7 @@ test("useDismiss listens only while active, and unsubscribes", async () => {
   // Unmounting must remove the listener, or every screen the IDE has ever
   // shown keeps handling taps.
   render(null, host);
+  await flush();
   await flush();
   document.body.dispatchEvent(
     new dom.window.Event("pointerdown", { bubbles: true }));
