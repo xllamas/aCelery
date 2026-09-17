@@ -197,7 +197,8 @@ without new instrumentation.
   `mcp-remote` line for Claude Desktop. *Done, 2026-09-16 (§16), except a
   real phone.*
 - **M3 — run and debug.** P3, P4, and the run tools. The screenshot spike
-  (§13.4) is decided here.
+  (§13.4) is decided here. *Done, 2026-09-17 (§18), on Android; iOS
+  unverified.*
 - **M4 — optional.** ~~The Android foreground service~~ (moved into M2,
   §17), the generated API
   reference, the IDE's "changed outside the editor" guard, and the revived
@@ -259,10 +260,15 @@ without new instrumentation.
 2. **Require a token even on loopback?** *Recommended: yes.*
 3. **Console capture through the injected shim, or the platform callback?**
    *Recommended: the shim — it works on iOS too and carries stacks.*
+   *Decided in M3 (§18): both. A script loaded first by `launcher.html`, not
+   the shim, and on Android the platform callback for what Chromium does not
+   dispatch to the page.*
 4. **Screenshots.** `webview_flutter` exposes no snapshot;
    `RepaintBoundary` over a platform view is uncertain on Android, and
    WKWebView's own `takeSnapshot` is not surfaced. *Recommended: a timeboxed
-   spike in M3; ship `dom` meanwhile.*
+   spike in M3; ship `dom` meanwhile.* *Decided in M3 (§18):
+   `RepaintBoundary` works on Android, so `take_screenshot` ships there. iOS
+   would need `takeSnapshot` through a channel of our own.*
 5. **Scaffold as bundle templates** (P5). *Recommended: yes.*
 6. **Android foreground service.** *Decided 2026-09-16: a `connectedDevice`
    foreground service runs exactly while sharing is on (§17).*
@@ -646,3 +652,136 @@ to `http://192.168.100.119:8123/mcp` from the Mac:
   engine owned by the service, which is not built.
 - iOS cannot serve in the background at all.
 
+## 18. M3: implemented (2026-09-17)
+
+An assistant can now run an app on the phone, read what its console said, look
+at its page and act on it. Verified on the emulator (Android 16, API 36)
+through `/mcp` over `adb forward`.
+
+**Tools.** The names follow the M1 tools (`verb_noun`) rather than §5's
+sketch.
+
+| Tool | Behaviour |
+|---|---|
+| `run_app` | closes any open app, opens this one, waits up to 15 s for the launcher to report, then `settle_ms` (default 1000) more if it started. Returns `started`, `failed` with the launcher's title and detail, or `timeout`, and the console so far |
+| `read_console` | the console of the app on screen, or of the last one to run. `after_seq` takes the `last_seq` of an earlier call. 500 entries per run |
+| `eval_js` | runs code in the page and returns its last expression's value; a promise is awaited. Destructive |
+| `read_dom` | `outerHTML` or `innerText` of the first match for a selector, with the number of matches; "nothing matches" is a failure |
+| `take_screenshot` | a PNG of the app's WebView, at most 1280 px on its long side. Android only |
+| `close_app` | back to the IDE; `closed: false` when nothing was open |
+
+**Where M3 departed from §5 and §7:**
+
+- **Console capture is not in `hostShim`.** The shim is injected at
+  `onPageFinished`, and an app can fail before that. `www/system/js/capture.js`
+  is a classic script, the first script in `launcher.html`. It wraps
+  `console.log/info/warn/error/debug` and listens for `error` (in the capture
+  phase, so a failed `<img>` or `<script>` is reported too) and
+  `unhandledrejection`. It posts to `ACeleryHost`, which exists from the first
+  line, and does nothing in a browser on the network.
+  - Values are described, not just stringified: JSON with `[Circular]`, an
+    element's `outerHTML`, an Error's stack (V8 and JavaScriptCore format it
+    differently). 4000 characters per entry.
+  - Past 200 messages in a second the rest are counted, and the count is sent
+    as `consoleDropped`.
+- **The launcher reports its start.** `fail()` calls
+  `__aCeleryCapture.failed(title, detail)`, and a `main()` that returns calls
+  `started()`. `run()` now has a `.catch`, so a bridge error in the launcher
+  itself is shown rather than lost.
+- **Syntax errors are located.** A SyntaxError from `import()` has no file or
+  line in Chrome: the device said only `missing ) after argument list`.
+  `locateSyntaxError` then adds a `<script type="module">` for the same entry,
+  whose parse error reaches `window` with the file, line and column of
+  whichever module failed. On the emulator this gave `/user/Mthree/main.js:5:23`,
+  and `/user/Mthree/util.js:2:19` for an error in an imported module.
+- **Android's console callback fills a gap.** Chromium dispatches no
+  `unhandledrejection` for a promise the browser rejected itself
+  (`fetch(...).then((r) => r.json())` on a body that is not JSON), nor for
+  code run through `evaluateJavascript`. Its console still logs
+  `Uncaught (in promise) …`. `AppRun.reportPlatformUncaught` records those
+  lines 300 ms later, unless capture.js reported the same text within two
+  seconds, since capture.js's copy has the stack. Found on the emulator: a
+  rejection from `JSON.parse` in module code was captured, the one from
+  `response.json()` was not.
+- **`eval_js` answers over the host channel,** not through
+  `runJavaScriptReturningResult`, whose result types differ between Android
+  and iOS and which cannot wait for a promise. The code travels as a JSON
+  string and runs with indirect `eval`, so it is global code: it sees `window`,
+  not the app module's variables. The page posts `evalResult` with the id; an
+  unknown id is ignored.
+- **Events from server to shell (P4)** are `AppRuns` on `ACeleryServer`
+  (`lib/src/mcp/app_runs.dart`), with no Flutter in it:
+  - `UserAppScreen` begins a run when its WebView exists and ends it on
+    dispose, however it was opened: Run on the phone, a home screen shortcut,
+    or `run_app`. So `read_console` also shows a run the user started.
+  - The IDE sets `runs.screen`, an `AppScreen` that pops to the IDE and pushes
+    the app, the same path the shortcut uses.
+  - `close_app` ends the run when it pops, not when the route is disposed.
+    Found on the device: disposal waits for the closing animation, and a
+    second `close_app` in that window answered `closed: true` again.
+  - Reload in the app's menu starts a new run.
+- **Screenshots (§13.4).** `UserAppScreen` wraps the WebView in a
+  `RepaintBoundary`. webview_flutter on Android composites the WebView as a
+  texture, so `toImage` includes it.
+  - The first capture after a change was stale: it showed the page from
+    before an `eval_js`. The tool now waits for two animation frames in the
+    page, then two Flutter frames. Three captures, each straight after setting
+    the body to red, green and blue, then read back exactly those colours, in
+    0.25–0.42 s each.
+  - iOS composites WKWebView natively, outside the layer tree, so iOS is not
+    offered the tool: it answers that screenshots are not available.
+- **MCP image results.** A tool may return `ToolImage`; `callTool` sends image
+  content followed by the details as text.
+
+**Tests.** Dart went from 254 to 280 passing, node from 106 to 116, and
+`flutter analyze` is clean.
+
+- `test/app_runs_test.dart`: the ring buffer, the first start report winning,
+  platform errors deduplicated, eval ids and timeouts, pending evals failing
+  when the app closes, an old run's end not ending its replacement, and
+  `close()` ending the run at once.
+- `test/mcp_test.dart`, group `run and debug tools`, over HTTP against a fake
+  page that disposes late, as a route does. The `close_app` test was confirmed
+  to fail with the fix removed.
+- `test/mcp_page_scripts_test.dart` runs the scripts `eval_js`, `read_dom` and
+  `take_screenshot` send through capture.js in jsdom under node: values,
+  promises, errors, SyntaxErrors, elements, `\u2028`, and selectors that find
+  nothing or are invalid. Skipped without node.
+- `web/test/capture.test.js`: forwarding with levels and call-through, stacks,
+  uncaught errors with their source, failed `<img>`, rejections, describing
+  values, the rate limit, start and failure, no host, and that it is the first
+  script in `launcher.html`.
+- `test/host_bridge_test.dart`: the new messages, including an unknown level
+  and an `evalResult` without a numeric id.
+
+**Verified on the emulator,** with a key minted in Connect an assistant:
+
+- `run_app` on an app with a syntax error answered `failed` in 1.35 s, with
+  the location; on one whose `main` never returns, `timeout` after 15 s, with
+  its console, and `read_dom` still read the page.
+- After a fix, `started`, with the `console.log` from `main`. `eval_js`
+  clicked a button, and the `TypeError` in its handler came back from
+  `read_console` with `main.js:10:74` and a stack.
+- `read_dom` with text, `eval_js` returning an awaited object, and a thrown
+  `ReferenceError` returned as the failure.
+- A run started by tapping the Example card showed in `read_console`, and
+  `eval_js` answered in it.
+- The test app and the key were removed afterwards; sharing stayed off.
+
+**Not verified:**
+
+- iOS: capture.js, the start reports and `eval_js` should work there, since
+  they use only the host channel. Unhandled rejections from browser code and
+  from `eval_js` are not filled in, because webview_flutter has no console
+  callback on iOS.
+- A physical phone, and Claude Code itself: the calls were made by a small
+  JSON-RPC client over the same HTTP.
+
+**Known limits:**
+
+- `run_app` goes through the IDE's `forceSaveFile`, as Run does. If the user
+  has unsaved edits to the file an assistant just wrote, those edits are saved
+  over it. The "changed outside the editor" guard (M4) is what fixes that.
+- `eval_js` cannot see module scope; the guide says to put what is needed on
+  `window` while debugging.
+- `errorlog.html` is still dead; M4 can now fill it from `AppRuns`.

@@ -1,6 +1,12 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../acelery_runtime.dart';
+import '../mcp/app_runs.dart';
 import 'acelery_web_view.dart';
 import 'home_shortcuts.dart';
 import 'host_actions.dart';
@@ -61,6 +67,64 @@ class _UserAppScreenState extends State<UserAppScreen> {
 
   ACeleryWebViewState? get _webView => _webViewKey.currentState;
 
+  /// What this screen's app is doing, for the MCP run tools. Begun when the
+  /// WebView exists, so a start that fails at once is still recorded.
+  AppRun? _run;
+
+  AppRuns get _runs => widget.runtime.server.runs;
+
+  void _beginRun(WebViewController controller) {
+    _run = _runs.begin(
+      widget.app,
+      controller.runJavaScript,
+      // iOS composites WKWebView natively, outside anything Flutter can draw
+      // into an image, so a boundary there would capture a blank page.
+      snapshot: Platform.isAndroid ? _snapshot : null,
+    );
+  }
+
+  final GlobalKey _boundaryKey = GlobalKey();
+
+  /// The longer side of a screenshot, in pixels.
+  static const double _maxShotSide = 1280;
+
+  /// Draws the WebView through a [RepaintBoundary] (doc/mcp-server.md §13.4).
+  Future<AppSnapshot?> _snapshot() async {
+    // Two Flutter frames, so the WebView's newest texture has been composited
+    // into the layer the boundary draws.
+    for (var i = 0; i < 2; i++) {
+      WidgetsBinding.instance.scheduleFrame();
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    if (!mounted) return null;
+    final boundary = _boundaryKey.currentContext?.findRenderObject();
+    if (boundary is! RenderRepaintBoundary) return null;
+    final size = boundary.size;
+    final longest = size.longestSide;
+    if (longest == 0) return null;
+    final ratio = MediaQuery.devicePixelRatioOf(context)
+        .clamp(0.1, _maxShotSide / longest);
+    final image = await boundary.toImage(pixelRatio: ratio);
+    try {
+      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (png == null) return null;
+      return AppSnapshot(
+        png: png.buffer.asUint8List(),
+        width: image.width,
+        height: image.height,
+      );
+    } finally {
+      image.dispose();
+    }
+  }
+
+  @override
+  void dispose() {
+    final run = _run;
+    if (run != null) _runs.end(run);
+    super.dispose();
+  }
+
   Future<void> _onMessage(HostMessage message) async {
     switch (message) {
       case CloseAppMessage():
@@ -82,6 +146,26 @@ class _UserAppScreenState extends State<UserAppScreen> {
         );
       case OpenExternalMessage():
         await showBusy(context, _actions.openExternal(Uri.parse(message.url)));
+      case ConsoleMessage(
+        :final level,
+        :final text,
+        :final stack,
+        :final source,
+      ):
+        _run?.log(level, text, stack: stack, source: source);
+      case ConsoleDroppedMessage(:final count):
+        _run?.dropped += count;
+      case AppStartedMessage():
+        _run?.reportStarted();
+      case AppFailedMessage(:final title, :final detail):
+        _run?.reportFailed(title, detail);
+      case EvalResultMessage(:final id, :final ok, :final value, :final error):
+        _run?.resolveEval(
+          id,
+          ok
+              ? EvalResult.value(value ?? 'undefined')
+              : EvalResult.error(error ?? 'unknown error'),
+        );
       case ImportProjectMessage():
       // The system shell's Settings messages. A user app has no business
       // opening the network sheet or holding a wakelock, so they do nothing
@@ -97,7 +181,13 @@ class _UserAppScreenState extends State<UserAppScreen> {
   Future<void> _onMenu(_MenuAction action) async {
     switch (action) {
       case _MenuAction.reload:
-        await _webView?.controller.reload();
+        final controller = _webView?.controller;
+        if (controller == null) return;
+        // A reload is a fresh start, with a console of its own.
+        final previous = _run;
+        if (previous != null) _runs.end(previous);
+        _beginRun(controller);
+        await controller.reload();
       case _MenuAction.errorLog:
         await _webView?.controller.loadRequest(widget.runtime.errorLogUrl);
       case _MenuAction.addShortcut:
@@ -131,10 +221,17 @@ class _UserAppScreenState extends State<UserAppScreen> {
           ),
         ],
       ),
-      body: ACeleryWebView(
-        key: _webViewKey,
-        initialUrl: widget.runtime.launcherUrl(widget.app),
-        onMessage: _onMessage,
+      body: RepaintBoundary(
+        key: _boundaryKey,
+        child: ACeleryWebView(
+          key: _webViewKey,
+          initialUrl: widget.runtime.launcherUrl(widget.app),
+          onMessage: _onMessage,
+          onControllerReady: _beginRun,
+          onConsole: (level, message) {
+            if (level == 'error') _run?.reportPlatformUncaught(message);
+          },
+        ),
       ),
     );
   }

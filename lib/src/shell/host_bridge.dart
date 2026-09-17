@@ -22,6 +22,28 @@ sealed class HostMessage {
       'importProject' => const ImportProjectMessage(),
       'showNetworkAccess' => const ShowNetworkAccessMessage(),
       'addShortcut' => AddShortcutMessage(app: json['app'] as String? ?? ''),
+      'console' => ConsoleMessage(
+          level: ConsoleMessage.levels.contains(json['level'])
+              ? json['level'] as String
+              : 'log',
+          text: _string(json['text']) ?? '',
+          stack: _string(json['stack']),
+          source: _string(json['source']),
+        ),
+      'consoleDropped' => ConsoleDroppedMessage(
+          count: json['count'] is int ? json['count'] as int : 0,
+        ),
+      'appStarted' => const AppStartedMessage(),
+      'appFailed' => AppFailedMessage(
+          title: _string(json['title']) ?? '',
+          detail: _string(json['detail']) ?? '',
+        ),
+      'evalResult' when json['id'] is int => EvalResultMessage(
+          id: json['id'] as int,
+          ok: json['ok'] == true,
+          value: _string(json['value']),
+          error: _string(json['error']),
+        ),
       'setKeepAwake' => SetKeepAwakeMessage(on: json['on'] == true),
       'setChrome' => SetChromeMessage(
           dark: json['dark'] == true,
@@ -31,6 +53,8 @@ sealed class HostMessage {
     };
   }
 }
+
+String? _string(Object? value) => value is String ? value : null;
 
 /// `#rrggbb` → an opaque ARGB value; null for anything else, including the
 /// shorthand and alpha forms, which the page never sends.
@@ -52,6 +76,59 @@ class AddShortcutMessage extends HostMessage {
   const AddShortcutMessage({required this.app});
 
   final String app;
+}
+
+/// From `www/system/js/capture.js`, in a running app: one console call, or an
+/// error the app did not catch (doc/mcp-server.md §7 P3).
+class ConsoleMessage extends HostMessage {
+  const ConsoleMessage({
+    required this.level,
+    required this.text,
+    this.stack,
+    this.source,
+  });
+
+  static const Set<String> levels = {'log', 'info', 'warn', 'error', 'debug'};
+
+  final String level;
+  final String text;
+  final String? stack;
+  final String? source;
+}
+
+/// The page was logging faster than it sends, and left out [count] entries.
+class ConsoleDroppedMessage extends HostMessage {
+  const ConsoleDroppedMessage({required this.count});
+
+  final int count;
+}
+
+/// `launcher.html`: the app's `main()` returned.
+class AppStartedMessage extends HostMessage {
+  const AppStartedMessage();
+}
+
+/// `launcher.html`'s `fail()`: the app could not start.
+class AppFailedMessage extends HostMessage {
+  const AppFailedMessage({required this.title, required this.detail});
+
+  final String title;
+  final String detail;
+}
+
+/// The answer to a script the `eval_js` or `read_dom` tool ran.
+class EvalResultMessage extends HostMessage {
+  const EvalResultMessage({
+    required this.id,
+    required this.ok,
+    this.value,
+    this.error,
+  });
+
+  final int id;
+  final bool ok;
+  final String? value;
+  final String? error;
 }
 
 /// Settings → Keep screen on.

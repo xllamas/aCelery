@@ -16,6 +16,7 @@ class ACeleryWebView extends StatefulWidget {
     required this.initialUrl,
     required this.onMessage,
     this.onControllerReady,
+    this.onConsole,
   });
 
   final Uri initialUrl;
@@ -24,6 +25,10 @@ class ACeleryWebView extends StatefulWidget {
   final void Function(HostMessage message) onMessage;
 
   final void Function(WebViewController controller)? onControllerReady;
+
+  /// Every console message the platform reports, on Android. Only Android's
+  /// WebView exposes this; capture.js is what works everywhere.
+  final void Function(String level, String message)? onConsole;
 
   @override
   State<ACeleryWebView> createState() => ACeleryWebViewState();
@@ -62,6 +67,7 @@ class ACeleryWebViewState extends State<ACeleryWebView> {
       // since a user's app has no other way to report a scripting error.
       platform.setOnConsoleMessage((message) {
         debugPrint('aCelery [${message.level.name}] ${message.message}');
+        widget.onConsole?.call(message.level.name, message.message);
       });
       // xAlertDialog falls back to window.alert when there is no Android
       // interface. An unhandled alert blocks the WebView permanently, so it

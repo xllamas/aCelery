@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../acelery_runtime.dart';
+import '../mcp/app_runs.dart';
+import '../mcp/tool.dart';
 import '../server/access_control.dart';
 import 'acelery_web_view.dart';
 import 'host_actions.dart';
@@ -56,10 +58,17 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
     widget.runtime.shortcuts
       ..listen(onOpen: _openFromShortcut, onPinned: _onShortcutPinned)
       ..sync();
+
+    // And what an assistant's run_app opens apps on (doc/mcp-server.md §7 P4).
+    widget.runtime.server.runs.screen = _screen;
   }
+
+  late final _IdeAppScreen _screen = _IdeAppScreen(this);
 
   @override
   void dispose() {
+    final runs = widget.runtime.server.runs;
+    if (identical(runs.screen, _screen)) runs.screen = null;
     _pairings?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -116,7 +125,13 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
           if (color != null) _chromeColor = Color(color);
         });
       case CloseAppMessage():
-        // The IDE itself has nowhere to close to.
+      // The IDE itself has nowhere to close to, and only launcher.html
+      // reports a console or a start.
+      case ConsoleMessage():
+      case ConsoleDroppedMessage():
+      case AppStartedMessage():
+      case AppFailedMessage():
+      case EvalResultMessage():
         break;
     }
   }
@@ -149,17 +164,31 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
       return;
     }
 
-    final navigator = Navigator.of(context);
-    String? showing;
-    navigator.popUntil((route) {
-      showing = route.settings.name;
+    // Already on screen: reloading it would throw away where the user was.
+    if (_showing() == UserAppScreen.routeName(app)) return;
+    _openApp(app);
+  }
+
+  /// The name of the route on top.
+  String? _showing() {
+    String? name;
+    Navigator.of(context).popUntil((route) {
+      name = route.settings.name;
       return true;
     });
-    // Already on screen: reloading it would throw away where the user was.
-    if (showing == UserAppScreen.routeName(app)) return;
+    return name;
+  }
 
-    navigator.popUntil((route) => route.isFirst);
-    await _runApp(RunAppMessage(title: app, app: app, debug: false));
+  /// Shows [app] over the IDE, closing whatever app was open. Returns once
+  /// the route is pushed, not when it closes.
+  void _openApp(String app) {
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    unawaited(_runApp(RunAppMessage(title: app, app: app, debug: false)));
+  }
+
+  /// Back to the IDE, closing any app that is open.
+  void _closeApps() {
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   void _onShortcutPinned(String app) {
@@ -236,5 +265,23 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+}
+
+/// [AppScreen] for the MCP run tools, backed by the IDE's navigator.
+class _IdeAppScreen implements AppScreen {
+  _IdeAppScreen(this._ide);
+
+  final _IdeScreenState _ide;
+
+  @override
+  Future<void> open(String app) async {
+    if (!_ide.mounted) throw ToolFailure('aCelery\'s screen has closed');
+    _ide._openApp(app);
+  }
+
+  @override
+  Future<void> close() async {
+    if (_ide.mounted) _ide._closeApps();
   }
 }

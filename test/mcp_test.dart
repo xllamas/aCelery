@@ -1,10 +1,12 @@
 @TestOn('vm')
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:acelery/src/bridge/sql_bridge.dart';
+import 'package:acelery/src/mcp/app_runs.dart';
 import 'package:acelery/src/paths.dart';
 import 'package:acelery/src/server/access_control.dart';
 import 'package:acelery/src/server/acelery_server.dart';
@@ -168,8 +170,11 @@ void main() {
       expect(byName.keys, containsAll([
         'list_apps', 'read_app', 'read_file', 'create_app', 'write_file',
         'delete_file', 'delete_app', 'list_databases', 'query_db', 'exec_db',
-        'get_guide',
+        'get_guide', 'run_app', 'read_console', 'eval_js', 'read_dom',
+        'close_app',
       ]));
+      expect(byName['read_console']!['annotations']['readOnlyHint'], isTrue);
+      expect(byName['eval_js']!['annotations']['destructiveHint'], isTrue);
       expect(byName['query_db']!['annotations']['readOnlyHint'], isTrue);
       expect(byName['delete_app']!['annotations']['destructiveHint'], isTrue);
       expect(byName['write_file']!['inputSchema']['required'],
@@ -686,6 +691,133 @@ void main() {
     });
   });
 
+  group('run and debug tools', () {
+    late _FakePage page;
+
+    setUp(() async {
+      page = _FakePage(server.runs);
+      server.runs.screen = page;
+      await ok('create_app', {'name': 'Water'});
+    });
+
+    test('run_app opens the app and returns its start and console', () async {
+      final run = await ok('run_app', {'app': 'Water', 'settle_ms': 100});
+      expect(page.opened, ['Water']);
+      expect(run['status'], 'started');
+      expect(run['app'], 'Water');
+      final console = (run['console'] as List).cast<Map<String, dynamic>>();
+      expect(console.map((e) => e['text']),
+          ['Water says hello', 'a warning while settling'],
+          reason: 'output in the settle window is included');
+      expect(console.last['level'], 'warn');
+      expect(run['last_seq'], 2);
+      expect(run['more'], isFalse);
+    });
+
+    test('a failed start comes back with the launcher\'s message, at once',
+        () async {
+      page.failWith = 'main.js failed to load';
+      final watch = Stopwatch()..start();
+      final run = await ok('run_app', {'app': 'Water', 'settle_ms': 5000});
+      expect(watch.elapsed, lessThan(const Duration(seconds: 3)),
+          reason: 'no settling after a failure');
+      expect(run['status'], 'failed');
+      expect(run['failure'], {
+        'title': 'main.js failed to load',
+        'detail': 'SyntaxError: Unexpected token at main.js:3:9',
+      });
+    });
+
+    test('run_app refuses an app that does not exist, before opening anything',
+        () async {
+      expect(await failure('run_app', {'app': 'Nope'}), contains('No app named'));
+      expect(page.opened, isEmpty);
+    });
+
+    test('without aCelery on screen, run_app says so', () async {
+      server.runs.screen = null;
+      expect(await failure('run_app', {'app': 'Water'}),
+          contains('not showing its screen'));
+    });
+
+    test('read_console returns only what is new after last_seq', () async {
+      expect(await failure('read_console', {}), contains('No app has run'));
+      final run = await ok('run_app', {'app': 'Water', 'settle_ms': 0});
+      page.run!.log('error', 'Uncaught TypeError: x is null',
+          stack: 'TypeError: x is null\n    at add (main.js:20:3)',
+          source: 'main.js:20:3');
+
+      final fresh =
+          await ok('read_console', {'after_seq': run['last_seq'] as int});
+      expect(fresh['running'], isTrue);
+      expect(fresh['status'], 'started');
+      final entries = (fresh['console'] as List).cast<Map<String, dynamic>>();
+      expect(entries.map((e) => e['text']).last, 'Uncaught TypeError: x is null');
+      expect(entries.last['source'], 'main.js:20:3');
+      expect(entries.last['stack'], contains('main.js:20:3'));
+    });
+
+    test('eval_js returns the value, or what the code threw', () async {
+      await ok('run_app', {'app': 'Water', 'settle_ms': 0});
+      final result = await ok('eval_js', {'code': 'document.title'});
+      expect(result, {'app': 'Water', 'value': 'Water'});
+      expect(page.evaluated, ['document.title']);
+
+      expect(await failure('eval_js', {'code': 'throw new Error("no")'}),
+          'The code threw: Error: no\n    at <anonymous>:1:7');
+    });
+
+    test('read_dom returns the element, and says when nothing matches',
+        () async {
+      await ok('run_app', {'app': 'Water', 'settle_ms': 0});
+      final dom = await ok('read_dom', {'selector': 'button', 'max_chars': 100});
+      expect(dom['matches'], 2);
+      expect(dom['content'], hasLength(100));
+      expect(dom['truncated'], isTrue);
+      expect(dom['length'], 150);
+
+      expect(await failure('read_dom', {'selector': '.missing'}),
+          contains('Nothing on the page matches ".missing"'));
+    });
+
+    test('take_screenshot returns a PNG, after the page has painted', () async {
+      await ok('run_app', {'app': 'Water', 'settle_ms': 0});
+      final envelope = await rpc('tools/call', {'name': 'take_screenshot'});
+      final content = (envelope['result']['content'] as List)
+          .cast<Map<String, dynamic>>();
+      expect(content.first['type'], 'image');
+      expect(content.first['mimeType'], 'image/png');
+      expect(base64Decode(content.first['data'] as String), [137, 80, 78, 71]);
+      expect(jsonDecode(content.last['text'] as String),
+          {'app': 'Water', 'width': 360, 'height': 640});
+      expect(page.evaluated.single, contains('requestAnimationFrame'),
+          reason: 'a change made a moment ago must be in the picture');
+
+      page.canSnapshot = false;
+      await ok('run_app', {'app': 'Water', 'settle_ms': 0});
+      expect(await failure('take_screenshot', {}),
+          contains('not available on this device'));
+    });
+
+    test('close_app closes, and the console stays readable', () async {
+      await ok('run_app', {'app': 'Water', 'settle_ms': 0});
+      expect(await ok('close_app'), {'closed': true});
+      expect(await ok('close_app'), {'closed': false});
+
+      expect(await failure('eval_js', {'code': '1'}),
+          contains('Water is no longer open'));
+      final console = await ok('read_console');
+      expect(console['running'], isFalse);
+      expect(console['console'], isNotEmpty);
+    });
+
+    test('run_app is logged with its app', () async {
+      await ok('run_app', {'app': 'Water', 'settle_ms': 0});
+      final log = File('${paths.logRoot}mcp.log').readAsLinesSync();
+      expect(log.last, contains('\trun_app\tWater\tok'));
+    });
+  });
+
   group('resources and prompts', () {
     test('the guide is listed and readable, and get_guide returns it', () async {
       final listed = (await rpc('resources/list'))['result']['resources'] as List;
@@ -751,4 +883,80 @@ Future<String> _pairBrowser(AccessControl access) async {
     InternetAddress('192.168.1.60'),
   ) as AccessPairingRequired;
   return (await access.approve(result.pairing.id))!;
+}
+
+/// The device side of the run tools: a screen that opens an app and a page
+/// that answers the scripts `eval_js` and `read_dom` send, the way
+/// `UserAppScreen` and capture.js do. The scripts themselves run for real in
+/// mcp_page_scripts_test.dart.
+class _FakePage implements AppScreen {
+  _FakePage(this.runs);
+
+  final AppRuns runs;
+  final opened = <String>[];
+  final evaluated = <String>[];
+  AppRun? run;
+
+  /// False for a device that cannot take screenshots, as on iOS.
+  bool canSnapshot = true;
+
+  /// Set to make the next start fail with this title.
+  String? failWith;
+
+  @override
+  Future<void> open(String app) async {
+    opened.add(app);
+    final previous = run;
+    if (previous != null) runs.end(previous);
+    scheduleMicrotask(() {
+      final begun = run = runs.begin(app, _send,
+          snapshot: canSnapshot
+              ? () async => const AppSnapshot(
+                  png: [137, 80, 78, 71], width: 360, height: 640)
+              : null);
+      begun.log('log', '$app says hello');
+      if (failWith != null) {
+        begun.reportFailed(
+            failWith!, 'SyntaxError: Unexpected token at main.js:3:9');
+      } else {
+        begun.reportStarted();
+        Timer(const Duration(milliseconds: 20),
+            () => begun.log('warn', 'a warning while settling'));
+      }
+    });
+  }
+
+  /// Like a route, the screen is disposed, and ends its run, only after the
+  /// closing animation.
+  @override
+  Future<void> close() async {
+    final open = run;
+    if (open != null) {
+      Timer(const Duration(milliseconds: 300), () => runs.end(open));
+    }
+  }
+
+  Future<void> _send(String script) async {
+    final id = int.parse(
+        RegExp(r'payload\.id = (\d+);').firstMatch(script)!.group(1)!);
+    final code = jsonDecode(
+        RegExp(r'\(0, eval\)\((".*")\); \}\)').firstMatch(script)!.group(1)!)
+        as String;
+    final target = run!;
+    scheduleMicrotask(() => target.resolveEval(id, _answer(code)));
+  }
+
+  EvalResult _answer(String code) {
+    if (code.contains('querySelectorAll("button")')) {
+      return EvalResult.value(jsonEncode({'count': 2, 'content': 'b' * 150}));
+    }
+    if (code.contains('querySelectorAll(')) {
+      return EvalResult.value(jsonEncode({'count': 0, 'content': ''}));
+    }
+    evaluated.add(code);
+    if (code.startsWith('throw')) {
+      return const EvalResult.error('Error: no\n    at <anonymous>:1:7');
+    }
+    return const EvalResult.value('Water');
+  }
 }

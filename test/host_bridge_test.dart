@@ -67,6 +67,38 @@ void main() {
       }
     });
 
+    test("a running app's console, start and eval answers parse", () {
+      // www/system/js/capture.js and launcher.html (doc/mcp-server.md §7 P3).
+      final entry = HostMessage.parse(
+          '{"action":"console","level":"warn","text":"low","stack":"s",'
+          '"source":"main.js:3:1"}') as ConsoleMessage;
+      expect([entry.level, entry.text, entry.stack, entry.source],
+          ['warn', 'low', 's', 'main.js:3:1']);
+
+      final odd = HostMessage.parse(
+          '{"action":"console","level":"<b>","text":7}') as ConsoleMessage;
+      expect(odd.level, 'log', reason: 'an unknown level is not passed on');
+      expect(odd.text, '');
+      expect(odd.stack, isNull);
+
+      expect((HostMessage.parse('{"action":"consoleDropped","count":50}')
+              as ConsoleDroppedMessage)
+          .count, 50);
+      expect(HostMessage.parse('{"action":"appStarted"}'),
+          isA<AppStartedMessage>());
+      final failed = HostMessage.parse(
+              '{"action":"appFailed","title":"t","detail":"d"}')
+          as AppFailedMessage;
+      expect([failed.title, failed.detail], ['t', 'd']);
+
+      final answer = HostMessage.parse(
+          '{"action":"evalResult","id":3,"ok":true,"value":"10"}')
+          as EvalResultMessage;
+      expect([answer.id, answer.ok, answer.value], [3, true, '10']);
+      expect(HostMessage.parse('{"action":"evalResult","id":"3","ok":true}'),
+          isNull, reason: 'an answer without a numeric id answers nothing');
+    });
+
     test('malformed input is dropped rather than thrown', () {
       // The channel is reachable from any script the user writes.
       expect(HostMessage.parse('not json'), isNull);

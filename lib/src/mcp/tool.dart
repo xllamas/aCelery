@@ -14,6 +14,15 @@ class ToolFailure implements Exception {
   String toString() => message;
 }
 
+/// A tool result that is a picture: sent as MCP image content, followed by
+/// [details] as JSON text.
+class ToolImage {
+  const ToolImage(this.png, this.details);
+
+  final List<int> png;
+  final Map<String, Object?> details;
+}
+
 /// One MCP tool: what `tools/list` says about it, and what `tools/call` runs.
 class McpTool {
   const McpTool({

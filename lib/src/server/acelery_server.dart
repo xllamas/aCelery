@@ -10,6 +10,7 @@ import '../bridge/export_bridge.dart';
 import '../bridge/file_bridge.dart';
 import '../bridge/http_bridge.dart';
 import '../bridge/sql_bridge.dart';
+import '../mcp/app_runs.dart';
 import '../mcp/server.dart';
 import '../mcp/transport.dart';
 import '../paths.dart';
@@ -41,7 +42,8 @@ class ACeleryServer {
             ) {
     // Built here rather than in start(), so sessions survive the rebind that
     // turning network sharing on or off performs.
-    mcp = McpTransport(McpServer(paths: paths, sql: sql, version: version));
+    mcp = McpTransport(
+        McpServer(paths: paths, sql: sql, runs: runs, version: version));
   }
 
   /// The port the bundle hard-codes in `xRunUserApp` and the IDE's URLs.
@@ -65,6 +67,10 @@ class ACeleryServer {
   final FileBridge files;
   final HttpBridge http;
   final ExportBridge export;
+
+  /// The apps on the device's screen. The shell opens them and reports what
+  /// they do; the MCP run tools read it.
+  final AppRuns runs = AppRuns();
 
   /// `/mcp`: the MCP server an assistant connects to (doc/mcp-server.md).
   late final McpTransport mcp;

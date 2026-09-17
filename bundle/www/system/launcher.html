@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- First, so nothing an app says or throws happens before it is listening. -->
+<script src="/system/js/capture.js" type="text/javascript"></script>
 <link rel="stylesheet" type="text/css" href="/tools/css/bootstrap.min.css" />
 <link rel="stylesheet" type="text/css" href="/tools/css/themes/_dark.css" />
 <link rel="stylesheet" type="text/css" id="xbtheme" href="/tools/css/themes/acelery.css" />
@@ -51,6 +53,7 @@ const STORAGE = "/user/";
 /** Shows a failure where the app would have been, not only in the console. */
 function fail(title, detail) {
   console.error(`aCelery: ${title}`, detail ?? "");
+  window.__aCeleryCapture?.failed(title, detail);
   document.body.innerHTML = "";
   const alert = document.createElement("div");
   alert.className = "alert alert-danger m-3";
@@ -74,6 +77,37 @@ function addStylesheet(href) {
   link.rel = "stylesheet";
   link.href = href;
   document.head.appendChild(link);
+}
+
+/**
+ * Where a module graph fails to parse, as `file:line:column`, or null.
+ *
+ * A SyntaxError from `import()` carries no location in Chrome, so an author,
+ * or an assistant reading the failure, cannot tell which line. A module script
+ * tag reports the same parse error to window, with the file, line and column
+ * of whichever module in the graph failed. The graph failed to parse, so none
+ * of it runs.
+ */
+function locateSyntaxError(url) {
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    const done = (where) => {
+      clearTimeout(timer);
+      window.removeEventListener("error", onError);
+      script.remove();
+      resolve(where);
+    };
+    const onError = (event) => {
+      if (event.error instanceof SyntaxError && event.filename) {
+        done(`${new URL(event.filename).pathname}:${event.lineno}:${event.colno}`);
+      }
+    };
+    const timer = setTimeout(() => done(null), 2000);
+    window.addEventListener("error", onError);
+    script.type = "module";
+    script.src = `${url}${url.includes("?") ? "&" : "?"}locate=${Date.now()}`;
+    document.head.appendChild(script);
+  });
 }
 
 async function run() {
@@ -116,7 +150,10 @@ async function run() {
     module = await import(`${STORAGE}${app}/${entry}`);
   } catch (e) {
     // Unbundled files mean this stack points straight at the author's line.
-    return fail(`${entry} failed to load`, e.stack ?? e);
+    const where = e instanceof SyntaxError
+      ? await locateSyntaxError(`${STORAGE}${app}/${entry}`)
+      : null;
+    return fail(`${entry} failed to load`, where ? `${e}\n    at ${where}` : e.stack ?? e);
   }
 
   /* `export default` is the contract. A named `main` export and a global one
@@ -135,9 +172,10 @@ async function run() {
   } catch (e) {
     return fail(`${app} threw while starting`, e.stack ?? e);
   }
+  window.__aCeleryCapture?.started();
 }
 
-run();
+run().catch((e) => fail("The launcher failed", e.stack ?? e));
 </script>
 </body>
 </html>
