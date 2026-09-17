@@ -5,7 +5,9 @@
 ////////////////////////////////////////////////////////////////
 
 /* Hands what a running app says to the aCelery host: its console, the errors
- * it does not catch, and how its start went (doc/mcp-server.md §7 P3).
+ * it does not catch, and how its start went (doc/mcp-server.md §7 P3). Also
+ * the colour behind the page, so the strip the host leaves clear of Android's
+ * gesture bar matches it.
  *
  * A classic script, loaded before anything else in launcher.html. The host's
  * own shim is injected when the page has finished loading, which is too late:
@@ -173,12 +175,80 @@
     );
   });
 
+  /* ------------------------------------------------------------ chrome */
+
+  /* The host keeps a user app out from under the system's gesture bar and
+     paints the strip below it. Only the page knows its colour: a theme, a
+     class on <body>, a stylesheet that has just loaded. Measured, as the
+     IDE's own shell does, and sent only when it changes. */
+
+  /** `rgb(26, 34, 36)` → [26, 34, 36]; null when fully transparent. */
+  function opaque(color) {
+    var m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+%?))?/
+      .exec(String(color));
+    if (!m) return null;
+    var alpha = m[4] === undefined ? 1
+      : m[4].slice(-1) === "%" ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
+    if (alpha === 0) return null;
+    return [m[1], m[2], m[3]].map(function (n) { return Math.round(parseFloat(n)); });
+  }
+
+  var lastChrome = null;
+  var chromePending = null;
+
+  function measureChrome() {
+    chromePending = null;
+    var style = function (el) { return window.getComputedStyle(el); };
+    var rgb = (document.body && opaque(style(document.body).backgroundColor)) ||
+      opaque(style(document.documentElement).backgroundColor) ||
+      [255, 255, 255];
+    var color = "#" + rgb.map(function (n) {
+      return ("0" + Math.max(0, Math.min(255, n)).toString(16)).slice(-2);
+    }).join("");
+    // Relative luminance, near enough to choose light or dark icons.
+    var dark = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255 < 0.5;
+    var key = color + (dark ? "d" : "l");
+    if (key === lastChrome) return;
+    lastChrome = key;
+    post({ action: "setChrome", dark: dark, color: color });
+  }
+
+  function reportChrome() {
+    if (!window.ACeleryHost || chromePending) return;
+    chromePending = setTimeout(measureChrome, 50);
+  }
+
+  function watchChrome() {
+    reportChrome();
+    var watch = { attributes: true, attributeFilter: ["class", "style", "data-bs-theme", "data-acelery-theme"] };
+    if (typeof MutationObserver === "function") {
+      var observer = new MutationObserver(reportChrome);
+      observer.observe(document.documentElement, watch);
+      if (document.body) observer.observe(document.body, watch);
+    }
+    // A stylesheet's load event does not bubble; capturing sees it.
+    document.addEventListener("load", reportChrome, true);
+    window.addEventListener("load", reportChrome);
+    if (window.matchMedia) {
+      var scheme = window.matchMedia("(prefers-color-scheme: dark)");
+      if (scheme.addEventListener) scheme.addEventListener("change", reportChrome);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", watchChrome, { once: true });
+  } else {
+    watchChrome();
+  }
+
   window.__aCeleryCapture = {
     describe: describe,
 
     /** launcher.html: main() returned. */
     started: function () {
       post({ action: "appStarted" });
+      // The app has rendered, maybe onto a background of its own.
+      reportChrome();
     },
 
     /** launcher.html's fail(): the app could not start. */

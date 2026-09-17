@@ -130,6 +130,50 @@ test("in a browser on the network there is no host, and nothing breaks", () => {
   window.eval("console.error(new Error('x')); __aCeleryCapture.started()");
 });
 
+/* ---------------------------------------------------------------- chrome */
+
+const settle = () => new Promise((r) => setTimeout(r, 120));
+const chrome = (posted) => posted.filter((m) => m.action === "setChrome");
+
+test("the page's background is reported, so the strip under the gesture bar matches", async () => {
+  const { window, posted } = page();
+  window.document.body.style.backgroundColor = "rgb(26, 34, 36)";
+  window.__aCeleryCapture.started();
+  await settle();
+  assert.deepEqual(chrome(posted).at(-1), { action: "setChrome", dark: true, color: "#1a2224" });
+});
+
+test("a transparent body falls back to <html>, then to white", async () => {
+  const { window, posted } = page();
+  window.document.documentElement.style.backgroundColor = "rgba(0, 0, 0, 0)";
+  window.__aCeleryCapture.started();
+  await settle();
+  assert.deepEqual(chrome(posted).at(-1), { action: "setChrome", dark: false, color: "#ffffff" });
+
+  window.document.documentElement.style.backgroundColor = "rgb(0, 60, 0)";
+  await settle();
+  assert.deepEqual(chrome(posted).at(-1), { action: "setChrome", dark: true, color: "#003c00" },
+    "a style change on <html> is noticed without the app saying anything");
+});
+
+test("a theme change is reported once, and an unchanged colour not again", async () => {
+  const { window, posted } = page();
+  window.__aCeleryCapture.started();
+  await settle();
+  const before = chrome(posted).length;
+
+  window.__aCeleryCapture.started();
+  window.document.body.className = "no-visual-change";
+  await settle();
+  assert.equal(chrome(posted).length, before, "same colour, nothing sent");
+
+  window.document.body.style.backgroundColor = "rgb(255, 248, 220)";
+  window.document.documentElement.setAttribute("data-bs-theme", "light");
+  await settle();
+  assert.equal(chrome(posted).length, before + 1, "several changes in a moment, one report");
+  assert.deepEqual(chrome(posted).at(-1), { action: "setChrome", dark: false, color: "#fff8dc" });
+});
+
 test("launcher.html loads it before any other script", () => {
   const html = readFileSync(join(repo, "bundle/www/system/launcher.html"), "utf8");
   const first = html.match(/<script\b[^>]*>/)[0];

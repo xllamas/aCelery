@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../acelery_runtime.dart';
@@ -82,6 +83,11 @@ class _UserAppScreenState extends State<UserAppScreen> {
       snapshot: Platform.isAndroid ? _snapshot : null,
     );
   }
+
+  /// The page's background, behind the system's navigation bar. White, like
+  /// the WebView, until capture.js reports one.
+  Color _chromeColor = Colors.white;
+  bool _chromeDark = false;
 
   final GlobalKey _boundaryKey = GlobalKey();
 
@@ -166,6 +172,14 @@ class _UserAppScreenState extends State<UserAppScreen> {
               ? EvalResult.value(value ?? 'undefined')
               : EvalResult.error(error ?? 'unknown error'),
         );
+      case SetChromeMessage(:final dark, :final color):
+        // capture.js measures the page's background; the strip kept clear of
+        // the gesture bar is painted to match.
+        if (!mounted) return;
+        setState(() {
+          _chromeDark = dark;
+          if (color != null) _chromeColor = Color(color);
+        });
       case ImportProjectMessage():
       // The system shell's Settings messages. A user app has no business
       // opening the network sheet or holding a wakelock, so they do nothing
@@ -173,7 +187,6 @@ class _UserAppScreenState extends State<UserAppScreen> {
       case ShowNetworkAccessMessage():
       case AddShortcutMessage():
       case SetKeepAwakeMessage():
-      case SetChromeMessage():
         break;
     }
   }
@@ -199,7 +212,25 @@ class _UserAppScreenState extends State<UserAppScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Android 15 draws every app edge to edge, so without the SafeArea the page
+    // ran on under the gesture bar and its bottom row could not be tapped.
+    // Only the navigation bar is styled here: the AppBar's own region decides
+    // the status bar.
+    final navigation = _chromeDark
+        ? SystemUiOverlayStyle.light
+        : SystemUiOverlayStyle.dark;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: navigation.copyWith(
+        systemNavigationBarColor: _chromeColor,
+        systemNavigationBarDividerColor: Colors.transparent,
+      ),
+      child: _scaffold(context),
+    );
+  }
+
+  Widget _scaffold(BuildContext context) {
     return Scaffold(
+      backgroundColor: _chromeColor,
       appBar: AppBar(
         title: Text('aCelery - ${widget.title}'),
         actions: [
@@ -221,16 +252,19 @@ class _UserAppScreenState extends State<UserAppScreen> {
           ),
         ],
       ),
-      body: RepaintBoundary(
-        key: _boundaryKey,
-        child: ACeleryWebView(
-          key: _webViewKey,
-          initialUrl: widget.runtime.launcherUrl(widget.app),
-          onMessage: _onMessage,
-          onControllerReady: _beginRun,
-          onConsole: (level, message) {
-            if (level == 'error') _run?.reportPlatformUncaught(message);
-          },
+      body: SafeArea(
+        top: false,
+        child: RepaintBoundary(
+          key: _boundaryKey,
+          child: ACeleryWebView(
+            key: _webViewKey,
+            initialUrl: widget.runtime.launcherUrl(widget.app),
+            onMessage: _onMessage,
+            onControllerReady: _beginRun,
+            onConsole: (level, message) {
+              if (level == 'error') _run?.reportPlatformUncaught(message);
+            },
+          ),
         ),
       ),
     );

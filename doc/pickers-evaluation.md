@@ -404,13 +404,21 @@ cleared the stuck shared storage:
 **Verified on a physical phone:** Xavier tested the pickers and the cropper
 on the Xiaomi (HyperOS, Android 16) and reported that they worked.
 
+**Verified from a remote browser:** Xavier picked an image in a browser on
+another computer and reported that it worked, which is the requirement that
+chose the design (§0).
+
 **Not verified:**
 
-- **A browser on another computer picking its own files.** The upload path
-  it uses was verified over HTTP; the picking is the browser's own.
 - **iOS:** WebKit's sheet, the usage descriptions, `cancel`, HEIC.
 - **Recording video,** and a camera app killing aCelery while it is in front
   (`retrieveLostData` is not wired).
-- **Layout:** on this emulator the modal's buttons sit just above the gesture
-  bar. A user app's WebView is not inset from the system bars, which predates
-  this work.
+- **Layout:** on this emulator the modal's buttons sat just above the gesture
+  bar, because a user app's WebView ran on under the system bars. *Fixed the
+  same day:* `UserAppScreen` puts the WebView in a `SafeArea` (bottom, left
+  and right; the AppBar already clears the top). The strip below is painted
+  the page's background, which `capture.js` measures and reports as
+  `setChrome`, as the IDE's shell does. On the emulator the WebView measured
+  2071 px, ending at y 2359, against a navigation bar from y 2361. Under
+  Darkly the strip turned dark and the handle light. Xavier confirmed the
+  fix on the Xiaomi.
