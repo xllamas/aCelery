@@ -768,14 +768,17 @@ sketch.
   `eval_js` answered in it.
 - The test app and the key were removed afterwards; sharing stayed off.
 
+**Verified on a physical phone** (2026-09-17): Xavier tested M3 on the Xiaomi
+(HyperOS, Android 16) and reported that it worked.
+
 **Not verified:**
 
 - iOS: capture.js, the start reports and `eval_js` should work there, since
   they use only the host channel. Unhandled rejections from browser code and
   from `eval_js` are not filled in, because webview_flutter has no console
   callback on iOS.
-- A physical phone, and Claude Code itself: the calls were made by a small
-  JSON-RPC client over the same HTTP.
+- Claude Code itself: the calls on the emulator were made by a small JSON-RPC
+  client over the same HTTP.
 
 **Known limits:**
 
