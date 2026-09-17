@@ -11,7 +11,7 @@ import {
   EmptyState, Icon, InlineError, ProjectCard, Skeleton, useToast,
 } from "./parts.js";
 import { navigate, setIntent } from "./router.js";
-import { deleteProject, listProjects } from "./store.js";
+import { canAddShortcut, deleteProject, hostPost, listProjects } from "./store.js";
 
 /** Shown once a list is long enough that scanning it is slower than typing. */
 export const SEARCH_THRESHOLD = 6;
@@ -103,6 +103,9 @@ export function AppsScreen({ settings, updateSettings }) {
                   actions=${[
                     { label: "Edit in Code", icon: "fa-solid fa-pen-to-square",
                       onSelect: () => navigate(["code", app.name]) },
+                    canAddShortcut() && {
+                      label: "Add to home screen", icon: "fa-solid fa-mobile-screen",
+                      onSelect: () => hostPost({ action: "addShortcut", app: app.name }) },
                     { label: "Export", icon: "fa-solid fa-file-export",
                       onSelect: () => exportProject(app.name) },
                     { label: "Delete", icon: "fa-solid fa-trash", danger: true,

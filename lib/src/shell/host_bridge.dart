@@ -21,6 +21,7 @@ sealed class HostMessage {
       'download' => DownloadMessage(url: json['url'] as String? ?? ''),
       'importProject' => const ImportProjectMessage(),
       'showNetworkAccess' => const ShowNetworkAccessMessage(),
+      'addShortcut' => AddShortcutMessage(app: json['app'] as String? ?? ''),
       'setKeepAwake' => SetKeepAwakeMessage(on: json['on'] == true),
       'setChrome' => SetChromeMessage(
           dark: json['dark'] == true,
@@ -44,6 +45,13 @@ int? parseHexColor(Object? value) {
 /// the network may reach the server.
 class ShowNetworkAccessMessage extends HostMessage {
   const ShowNetworkAccessMessage();
+}
+
+/// Apps → ⋮ → Add to home screen: pin a shortcut that opens [app].
+class AddShortcutMessage extends HostMessage {
+  const AddShortcutMessage({required this.app});
+
+  final String app;
 }
 
 /// Settings → Keep screen on.

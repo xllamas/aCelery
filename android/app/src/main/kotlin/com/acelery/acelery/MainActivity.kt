@@ -1,6 +1,7 @@
 package com.acelery.acelery
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
@@ -8,6 +9,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+
+    private var shortcuts: HomeShortcuts? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -37,12 +40,24 @@ class MainActivity : FlutterActivity() {
             }
         }
         channel = serving
+
+        shortcuts = HomeShortcuts(this, flutterEngine.dartExecutor.binaryMessenger)
+            .also { it.onIntent(intent, notify = false) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // A home screen shortcut tapped while aCelery is already running.
+        setIntent(intent)
+        shortcuts?.onIntent(intent, notify = true)
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         // The server lives in this engine. Once it is gone, a notification
         // saying the phone is shared would be false.
         channel = null
+        shortcuts?.dispose()
+        shortcuts = null
         ServingService.stop(this)
         super.cleanUpFlutterEngine(flutterEngine)
     }

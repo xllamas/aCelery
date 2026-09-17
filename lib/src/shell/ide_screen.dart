@@ -50,6 +50,12 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
     // A device on the network asking to connect has to interrupt: it is
     // waiting on a decision only the person holding the phone can make.
     _pairings = widget.runtime.server.access.requests.listen(_onPairingRequest);
+
+    // The IDE is the root route, so it is what a home screen shortcut opens
+    // an app on top of, including the shortcut that started aCelery.
+    widget.runtime.shortcuts
+      ..listen(onOpen: _openFromShortcut, onPinned: _onShortcutPinned)
+      ..sync();
   }
 
   @override
@@ -80,6 +86,11 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
         state == AppLifecycleState.inactive) {
       _webView?.forceSaveFile();
     }
+    // Leaving for the home screen is when a deleted app's shortcut would next
+    // be seen, so grey it out now.
+    if (state == AppLifecycleState.paused) {
+      widget.runtime.shortcuts.sync();
+    }
   }
 
   Future<void> _onMessage(HostMessage message) async {
@@ -94,6 +105,8 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
         await showBusy(context, _actions.openExternal(Uri.parse(message.url)));
       case ShowNetworkAccessMessage():
         await _showNetworkAccess();
+      case AddShortcutMessage(:final app):
+        await addToHomeScreen(context, widget.runtime, app);
       case SetKeepAwakeMessage(:final on):
         await WakelockPlus.toggle(enable: on);
       case SetChromeMessage(:final dark, :final color):
@@ -112,18 +125,47 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
     await _webView?.forceSaveFile();
     if (!mounted) return;
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => UserAppScreen(
-          runtime: widget.runtime,
-          title: message.title,
-          app: message.app,
-          debug: message.debug,
-        ),
+      UserAppScreen.route(
+        runtime: widget.runtime,
+        title: message.title,
+        app: message.app,
+        debug: message.debug,
       ),
     );
     // The app may have created databases or files; let the IDE catch up. The
     // shell's route is in the URL, so the reload lands where you were.
     await _webView?.controller.reload();
+  }
+
+  /// A home screen shortcut was tapped: run [app] over the IDE, closing
+  /// whatever app was open, as the 2014 shortcut's own Activity did.
+  Future<void> _openFromShortcut(String app) async {
+    if (!mounted) return;
+    final shortcuts = widget.runtime.shortcuts;
+    if (!shortcuts.exists(app)) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$app no longer exists')));
+      await shortcuts.sync();
+      return;
+    }
+
+    final navigator = Navigator.of(context);
+    String? showing;
+    navigator.popUntil((route) {
+      showing = route.settings.name;
+      return true;
+    });
+    // Already on screen: reloading it would throw away where the user was.
+    if (showing == UserAppScreen.routeName(app)) return;
+
+    navigator.popUntil((route) => route.isFirst);
+    await _runApp(RunAppMessage(title: app, app: app, debug: false));
+  }
+
+  void _onShortcutPinned(String app) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Added $app to your home screen')));
   }
 
   Future<void> _importProject() async {

@@ -44,6 +44,10 @@ void main() {
           HostMessage.parse('{"action":"setKeepAwake"}') as SetKeepAwakeMessage;
       expect(unset.on, isFalse, reason: 'anything but true is off');
 
+      final shortcut = HostMessage.parse('{"action":"addShortcut","app":"Demo"}')
+          as AddShortcutMessage;
+      expect(shortcut.app, 'Demo');
+
       final chrome = HostMessage.parse(
               '{"action":"setChrome","dark":true,"color":"#1a2224"}')
           as SetChromeMessage;

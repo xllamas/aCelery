@@ -7,6 +7,7 @@ import 'bundle_installer.dart';
 import 'paths.dart';
 import 'server/acelery_server.dart';
 import 'serving.dart';
+import 'shell/home_shortcuts.dart';
 
 /// Brings the aCelery host up: install the web bundle, then start the server
 /// that hosts it.
@@ -17,10 +18,12 @@ class ACeleryRuntime {
 
   /// Bump when `assets/aCelery.zip` changes, so installed devices refresh the
   /// shipped files on their next launch. User content is never touched.
-  static const String bundleVersion = '1.6.5+ios';
+  static const String bundleVersion = '1.6.6+shortcuts';
 
   final ACeleryPaths paths;
   final ACeleryServer server;
+
+  late final HomeShortcuts shortcuts = HomeShortcuts(paths);
 
   /// URL the WebView should load — the IDE's entry point.
   Uri get ideUrl => server.baseUri.replace(path: '/system/index.html');

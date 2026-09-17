@@ -211,6 +211,16 @@ export function hasHost() {
 }
 
 /**
+ * True where the host can pin a home screen shortcut: the Android app. iOS
+ * offers apps no way to put an icon on the home screen. The host channel is
+ * one-way and the shim arrives after first render, so the platform is read
+ * from the WebView's user agent rather than asked.
+ */
+export function canAddShortcut() {
+  return hasHost() && /\bAndroid\b/.test(globalThis.navigator?.userAgent ?? "");
+}
+
+/**
  * The shell's own messages to the host (§7): the network sheet, the wakelock,
  * the status bar colour. Fire-and-forget, like every host message, and a no-op
  * without a host — the rows that send them are hidden there anyway.

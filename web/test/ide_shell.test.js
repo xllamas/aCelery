@@ -498,6 +498,42 @@ test("Settings shows device rows only when there is a host to act on them", asyn
   }
 });
 
+test("Add to home screen is offered only by the Android app", async () => {
+  /* The menu item is read at render, so each case mounts afresh. */
+  async function actionsFor(userAgent, host) {
+    Object.defineProperty(globalThis, "navigator", {
+      value: { userAgent }, configurable: true, writable: true,
+    });
+    if (host) globalThis.ACeleryHost = host;
+    else delete globalThis.ACeleryHost;
+    await open("#/apps");
+    (await waitFor(() => byLabel("Actions for Example"), "the Example menu")).click();
+    await waitFor(() => byText("Export"), "the open menu");
+  }
+
+  const saved = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const android = "Mozilla/5.0 (Linux; Android 16; Pixel 9a; wv) AppleWebKit/537.36";
+  const iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15";
+  const posted = [];
+  const host = { postMessage: (m) => posted.push(JSON.parse(m)) };
+  try {
+    await actionsFor(android, null);
+    assert.equal(byText("Add to home screen"), undefined, "a browser on the network has no home screen to pin to");
+
+    await actionsFor(iphone, host);
+    assert.equal(byText("Add to home screen"), undefined, "iOS cannot pin shortcuts");
+
+    await actionsFor(android, host);
+    byText("Add to home screen").click();
+    await waitFor(() => posted.some((m) => m.action === "addShortcut"), "the host message");
+    assert.deepEqual(posted.find((m) => m.action === "addShortcut"), { action: "addShortcut", app: "Example" });
+  } finally {
+    delete globalThis.ACeleryHost;
+    if (saved) Object.defineProperty(globalThis, "navigator", saved);
+    else delete globalThis.navigator;
+  }
+});
+
 test("choosing a mode applies it and saves it", async () => {
   const host = await open("#/settings");
   const dark = await waitFor(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../acelery_runtime.dart';
 import 'acelery_web_view.dart';
+import 'home_shortcuts.dart';
 import 'host_actions.dart';
 import 'host_bridge.dart';
 
@@ -19,6 +20,27 @@ class UserAppScreen extends StatefulWidget {
     required this.debug,
   });
 
+  /// A route that knows which app it runs, so a home screen shortcut to the
+  /// app already on screen can leave it be.
+  static Route<void> route({
+    required ACeleryRuntime runtime,
+    required String title,
+    required String app,
+    required bool debug,
+  }) {
+    return MaterialPageRoute<void>(
+      settings: RouteSettings(name: routeName(app)),
+      builder: (_) => UserAppScreen(
+        runtime: runtime,
+        title: title,
+        app: app,
+        debug: debug,
+      ),
+    );
+  }
+
+  static String routeName(String app) => 'app:$app';
+
   final ACeleryRuntime runtime;
   final String title;
   final String app;
@@ -31,7 +53,7 @@ class UserAppScreen extends StatefulWidget {
   State<UserAppScreen> createState() => _UserAppScreenState();
 }
 
-enum _MenuAction { reload, errorLog, close }
+enum _MenuAction { reload, errorLog, addShortcut, close }
 
 class _UserAppScreenState extends State<UserAppScreen> {
   final GlobalKey<ACeleryWebViewState> _webViewKey = GlobalKey();
@@ -51,13 +73,11 @@ class _UserAppScreenState extends State<UserAppScreen> {
         // stacking indefinitely.
         if (!mounted) return;
         await Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(
-            builder: (_) => UserAppScreen(
-              runtime: widget.runtime,
-              title: message.title,
-              app: message.app,
-              debug: message.debug,
-            ),
+          UserAppScreen.route(
+            runtime: widget.runtime,
+            title: message.title,
+            app: message.app,
+            debug: message.debug,
           ),
         );
       case OpenExternalMessage():
@@ -67,6 +87,7 @@ class _UserAppScreenState extends State<UserAppScreen> {
       // opening the network sheet or holding a wakelock, so they do nothing
       // here even though the channel will carry them.
       case ShowNetworkAccessMessage():
+      case AddShortcutMessage():
       case SetKeepAwakeMessage():
       case SetChromeMessage():
         break;
@@ -79,6 +100,8 @@ class _UserAppScreenState extends State<UserAppScreen> {
         await _webView?.controller.reload();
       case _MenuAction.errorLog:
         await _webView?.controller.loadRequest(widget.runtime.errorLogUrl);
+      case _MenuAction.addShortcut:
+        if (mounted) await addToHomeScreen(context, widget.runtime, widget.app);
       case _MenuAction.close:
         if (mounted) Navigator.of(context).maybePop();
     }
@@ -98,6 +121,10 @@ class _UserAppScreenState extends State<UserAppScreen> {
               if (widget.debug)
                 const PopupMenuItem(
                     value: _MenuAction.errorLog, child: Text('Error log')),
+              if (HomeShortcuts.supported)
+                const PopupMenuItem(
+                    value: _MenuAction.addShortcut,
+                    child: Text('Add to home screen')),
               const PopupMenuItem(
                   value: _MenuAction.close, child: Text('Close')),
             ],

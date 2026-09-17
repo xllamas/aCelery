@@ -3,12 +3,14 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../acelery_runtime.dart';
 import '../bundle_installer.dart';
 import '../paths.dart';
+import 'home_shortcuts.dart';
 
 /// The platform work the two Activities used to do: saving a download,
 /// picking a project archive to import.
@@ -112,5 +114,37 @@ Future<void> showBusy(BuildContext context, Future<void> work) async {
     await work;
   } on Exception catch (error) {
     messenger.showSnackBar(SnackBar(content: Text('$error')));
+  }
+}
+
+/// Apps → ⋮ → Add to home screen, and the same item in a running app's menu.
+///
+/// Says nothing when the launcher takes the request: it asks the user itself,
+/// and the IDE reports the shortcut once the launcher confirms it is placed.
+Future<void> addToHomeScreen(
+  BuildContext context,
+  ACeleryRuntime runtime,
+  String app,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  void say(String text) =>
+      messenger.showSnackBar(SnackBar(content: Text(text)));
+
+  final shortcuts = runtime.shortcuts;
+  if (!shortcuts.exists(app)) {
+    say('$app no longer exists');
+    return;
+  }
+  try {
+    switch (await shortcuts.pin(app)) {
+      case PinOutcome.requested:
+        break;
+      case PinOutcome.updated:
+        say('$app is already on your home screen');
+      case PinOutcome.unsupported:
+        say("Your home screen doesn't accept shortcuts");
+    }
+  } on PlatformException catch (error) {
+    say('Could not add $app: ${error.message}');
   }
 }
