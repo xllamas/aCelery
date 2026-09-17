@@ -22,7 +22,8 @@ export class BridgeError extends Error {
   }
 }
 
-function url(params) {
+/** The address of a bridge route, for a request the page makes itself. */
+export function url(params) {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null) q.set(k, String(v));
@@ -80,4 +81,16 @@ export async function postText(params, body) {
   });
   if (!response.ok) throw await fail(response);
   return response.text();
+}
+
+/** POST bytes — a Blob, File or ArrayBuffer — to a route that answers JSON. */
+export async function postBytes(params, body) {
+  const response = await fetch(url(params), {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/octet-stream" },
+    body,
+  });
+  if (!response.ok) throw await fail(response);
+  return response.json();
 }

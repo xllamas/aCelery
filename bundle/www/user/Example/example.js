@@ -23,6 +23,8 @@
 
 import { openDB } from "acelery/sql.js";
 import { saveFile, closeApp } from "acelery/export.js";
+import * as file from "acelery/file.js";
+import { pickFiles, pickImages, shrinkImage } from "acelery/picker.js";
 /* Charts are a separate import because Chart.js is 68 KB gzipped and most apps
    never draw one — an app pays for it only by asking. */
 import { Chart, fromRows } from "acelery/chart.js";
@@ -32,7 +34,7 @@ import {
   Alert, Button, ButtonGroup, ListGroup, Modal, Tab, Tabs,
   Row, Col, Panel,
   Form, Input, Select, TextArea, CheckBox,
-  TableMaint, ThemeSelect,
+  TableMaint, ThemeSelect, ImageCropper,
   notEmpty, email,
 } from "acelery/ui.js";
 
@@ -212,6 +214,124 @@ function ExportDemo({ db }) {
 }
 
 /**
+ * Photos: pick, crop, store, show.
+ *
+ * The pickers are the page's own file input, so on the phone they open the
+ * camera or the gallery, and in a browser on your network they pick from that
+ * computer. The bytes then go to the phone with file.writeBytes, and come back
+ * by URL for an <img>.
+ */
+const PHOTOS = "Example/photos";
+
+function PhotoDemo() {
+  const [photos, setPhotos] = useState(null);
+  const [cropping, setCropping] = useState(null);
+  const [picked, setPicked] = useState(null);
+  const [status, setStatus] = useState(null);
+
+  async function load() {
+    const entries = await file.listFiles(PHOTOS);
+    setPhotos(entries
+      .filter((e) => !e.directory && /\.(jpe?g|png|webp)$/i.test(e.fname))
+      .sort((a, b) => b.lastmodified - a.lastmodified));
+  }
+
+  useEffect(() => { load().catch((e) => setStatus({ variant: "danger", text: e.message })); }, []);
+
+  /* A name of the app's choosing: the picked file's own name comes from the
+     user's device and may be anything. */
+  const store = async (blob) => {
+    const name = `${Date.now()}.jpg`;
+    await file.writeBytes(`${PHOTOS}/${name}`, blob);
+    return name;
+  };
+
+  async function run(work) {
+    setStatus(null);
+    try {
+      await work();
+      await load();
+    } catch (e) {
+      setStatus({ variant: "danger", text: e.message });
+    }
+  }
+
+  /* Browsers open a picker only from a tap, so these run in click handlers. */
+  const takeOrChoose = (camera) => run(async () => {
+    const [photo] = await pickImages({ camera });
+    if (photo) setCropping(photo);
+  });
+
+  const addSeveral = () => run(async () => {
+    const chosen = await pickImages({ multiple: true });
+    for (const photo of chosen) await store(await shrinkImage(photo));
+    if (chosen.length) {
+      setStatus({ variant: "success", text: `Added ${chosen.length} photos.` });
+    }
+  });
+
+  const remove = (entry) => run(async () => {
+    const handle = await file.open(`${PHOTOS}/${entry.fname}`);
+    await handle.delete();
+  });
+
+  const inspect = () => run(async () => {
+    const [chosen] = await pickFiles();
+    if (chosen) setPicked(chosen);
+  });
+
+  return html`
+    <${Panel} title="Photos">
+      <p>
+        Take or choose a photo, crop it, and it is stored in
+        <code>files/${PHOTOS}</code>.
+      </p>
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        <${Button} variant="primary" onClick=${() => takeOrChoose(true)}>Take a photo<//>
+        <${Button} variant="outline-primary" onClick=${() => takeOrChoose(false)}>
+          Choose a photo
+        <//>
+        <${Button} variant="outline-secondary" onClick=${addSeveral}>Add several<//>
+      </div>
+      ${status
+        ? html`<${Alert} variant=${status.variant}>${status.text}<//>`
+        : null}
+      ${photos === null
+        ? html`<p class="text-body-secondary">Loading…</p>`
+        : photos.length
+          ? html`
+              <${Row}>
+                ${photos.map((entry) => html`
+                  <${Col} span=${3} key=${entry.fname} className="mb-3">
+                    <img src=${file.url(`${PHOTOS}/${entry.fname}`)}
+                         alt="" class="img-fluid rounded mb-1" />
+                    <${Button} size="sm" variant="outline-danger"
+                               onClick=${() => remove(entry)}>Delete<//>
+                  <//>`)}
+              <//>`
+          : html`<p class="text-body-secondary">No photos yet.</p>`}
+    <//>
+
+    <${Panel} title="Any file" className="mt-3">
+      <p>Pick any file to see what the app receives. Nothing is stored.</p>
+      <${Button} variant="outline-primary" onClick=${inspect}>Pick a file<//>
+      ${picked
+        ? html`<p class="mt-3 mb-0">
+            <strong>${picked.name}</strong>, ${picked.type || "unknown type"},
+            ${picked.size.toLocaleString()} bytes
+          </p>`
+        : null}
+    <//>
+
+    <${ImageCropper} image=${cropping} shape="round" maxSide=${800}
+      onCancel=${() => setCropping(null)}
+      onDone=${(blob) => run(async () => {
+        await store(blob);
+        setCropping(null);
+      })} />`;
+}
+
+/**
  * A chart over the data the Directory holds.
  *
  * `fromRows` is the step between a result set and a Chart.js config, which is
@@ -282,6 +402,9 @@ const Welcome = () => html`
       <${ListGroup.Item}>
         <strong>Export</strong> — build a file and hand it to the device
       <//>
+      <${ListGroup.Item}>
+        <strong>Photos</strong> — take, choose and crop pictures, and store them
+      <//>
     <//>
   <//>`;
 
@@ -296,6 +419,7 @@ const SCREENS = {
   modal: ModalDemo,
   chart: ChartDemo,
   export: ExportDemo,
+  photos: PhotoDemo,
 };
 
 function App() {
@@ -349,6 +473,7 @@ function App() {
             <${Nav.Link} onClick=${() => go("tabs")}>Tabs<//>
             <${Nav.Link} onClick=${() => go("widgets")}>Widgets<//>
             <${Nav.Link} onClick=${() => go("chart")}>Chart<//>
+            <${Nav.Link} onClick=${() => go("photos")}>Photos<//>
             <${Nav.Link} onClick=${() => go("modal")}>Modal<//>
             <${Nav.Link} onClick=${closeApp}>Exit<//>
           <//>

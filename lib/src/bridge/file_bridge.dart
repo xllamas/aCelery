@@ -146,7 +146,105 @@ class FileBridge {
     }
   }
 
+  /// The largest body [upload] accepts. A phone photo is 3–12 MB before an
+  /// app shrinks it; this leaves room for a short video or an unshrunk photo.
+  static const int maxUploadBytes = 25 * 1024 * 1024;
+
+  /// Writes [body] to a file as bytes, for pictures and other binaries the
+  /// string routes cannot carry (doc/pickers-evaluation.md §5.1).
+  ///
+  /// The bytes go to a `.part` file that replaces the target only once the
+  /// whole body has arrived, so a refused or dropped upload leaves the old
+  /// file, or none, rather than half of the new one.
+  Future<UploadResult> upload(
+    String path,
+    String? basePath,
+    Stream<List<int>> body, {
+    int maxBytes = maxUploadBytes,
+  }) async {
+    final resolved = _resolve(path, basePath);
+    if (!_permitted(resolved) || resolved.endsWith('/')) {
+      return const UploadRefused();
+    }
+    final target = File(resolved);
+    if (Directory(resolved).existsSync()) return const UploadRefused();
+
+    final part = File('$resolved.part');
+    try {
+      await target.parent.create(recursive: true);
+    } on FileSystemException catch (e) {
+      return UploadFailed(e.message);
+    }
+
+    final sink = part.openWrite();
+    var open = true;
+    var size = 0;
+    Future<void> discard() async {
+      if (open) {
+        open = false;
+        await sink.close().catchError((Object _) {});
+      }
+      if (part.existsSync()) await part.delete();
+    }
+
+    try {
+      await for (final chunk in body) {
+        size += chunk.length;
+        if (size > maxBytes) {
+          await discard();
+          return UploadTooLarge(maxBytes);
+        }
+        sink.add(chunk);
+      }
+      open = false;
+      await sink.close();
+      await part.rename(resolved);
+      return UploadDone(size);
+    } on IOException catch (e) {
+      // The disk refused, or the client went away mid-body.
+      await discard();
+      return UploadFailed('$e');
+    }
+  }
+
+  /// The file at [path], for sending as it is, or null when it is outside the
+  /// tree, a directory, or missing.
+  File? rawFile(String path, String? basePath) {
+    final resolved = _resolve(path, basePath);
+    if (!_permitted(resolved)) return null;
+    final file = File(resolved);
+    return file.existsSync() ? file : null;
+  }
+
   /// `xGetExternalStoragePath` — the parent of the aCelery folder. The JS side
   /// concatenates "/aCelery/www/user/" onto this in `launcher.html`.
   String externalStoragePath() => paths.root;
+}
+
+/// How [FileBridge.upload] came out.
+sealed class UploadResult {
+  const UploadResult();
+}
+
+class UploadDone extends UploadResult {
+  const UploadDone(this.size);
+
+  final int size;
+}
+
+/// Outside the tree, or a directory.
+class UploadRefused extends UploadResult {
+  const UploadRefused();
+}
+
+class UploadTooLarge extends UploadResult {
+  const UploadTooLarge(this.maxBytes);
+
+  final int maxBytes;
+}
+
+class UploadFailed extends UploadResult {
+  const UploadFailed(this.message);
+
+  final String message;
 }

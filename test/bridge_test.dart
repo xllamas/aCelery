@@ -1,8 +1,10 @@
 @TestOn('vm')
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:acelery/src/bridge/export_bridge.dart';
 import 'package:acelery/src/bridge/file_bridge.dart';
@@ -534,6 +536,112 @@ void main() {
       final response = await raw(
           'opt=file&action=openfile&path=${Uri.encodeComponent('../../escape')}');
       expect(response.statusCode, 500);
+    });
+  });
+
+  group('opt=file — binary upload and raw read', () {
+    /// Every byte value, so an encoding step anywhere would show.
+    final bytes = List<int>.generate(1024, (i) => i % 256);
+
+    Future<http.Response> upload(String query, List<int> body) =>
+        http.post(itf.replace(query: 'opt=file&action=upload&$query'),
+            body: body);
+
+    test('bytes go in and come back unchanged, with a content type', () async {
+      final path = Uri.encodeComponent('Garden/photos/rose 1.png');
+      final response = await upload('path=$path', bytes);
+      expect(response.statusCode, 200, reason: response.body);
+      expect(jsonDecode(response.body), {'size': 1024});
+      expect(File('${paths.filesRoot}Garden/photos/rose 1.png').readAsBytesSync(),
+          bytes, reason: 'folders are created, the name is kept');
+
+      final read = await raw('opt=file&action=raw&path=$path');
+      expect(read.statusCode, 200);
+      expect(read.bodyBytes, bytes);
+      expect(read.headers['content-type'], 'image/png');
+      expect(read.headers['cache-control'], contains('no-cache'));
+    });
+
+    test('an upload replaces the file, and leaves no .part behind', () async {
+      await upload('path=a.jpg', [1, 2, 3]);
+      await upload('path=a.jpg', [4, 5]);
+      expect(File('${paths.filesRoot}a.jpg').readAsBytesSync(), [4, 5]);
+      expect(File('${paths.filesRoot}a.jpg.part').existsSync(), isFalse);
+      expect((await raw('opt=file&action=raw&path=a.jpg'))
+          .headers['content-type'], 'image/jpeg');
+    });
+
+    test('bpath works as for the other file routes', () async {
+      final bpath = Uri.encodeComponent(paths.userRoot);
+      expect((await upload('path=App/icon.webp&bpath=$bpath', bytes)).statusCode,
+          200);
+      expect(File('${paths.userRoot}App/icon.webp').existsSync(), isTrue);
+      expect((await raw('opt=file&action=raw&path=App/icon.webp&bpath=$bpath'))
+          .bodyBytes, bytes);
+    });
+
+    test('outside the tree is refused both ways', () async {
+      final escape = Uri.encodeComponent('../../escape.png');
+      final written = await upload('path=$escape', bytes);
+      expect(written.statusCode, 500);
+      expect(jsonDecode(written.body)['error'], contains('Cannot write'));
+      expect(File(p.join(tmp.path, 'escape.png')).existsSync(), isFalse,
+          reason: 'files/../../ is the folder above the aCelery tree');
+
+      await File(p.join(tmp.path, 'outside.txt')).writeAsString('secret');
+      final read = await raw('opt=file&action=raw'
+          '&path=${Uri.encodeComponent('../../outside.txt')}');
+      expect(read.statusCode, 404);
+      expect(read.body, isNot(contains('secret')));
+    });
+
+    test('a directory is neither overwritten nor served', () async {
+      await Directory('${paths.filesRoot}photos').create();
+      expect((await upload('path=photos', bytes)).statusCode, 500);
+      expect(Directory('${paths.filesRoot}photos').existsSync(), isTrue);
+      expect((await raw('opt=file&action=raw&path=photos')).statusCode, 404);
+      expect((await raw('opt=file&action=raw&path=missing.png')).statusCode, 404);
+    });
+
+    test('upload must be a POST', () async {
+      expect((await raw('opt=file&action=upload&path=x.png')).statusCode, 400);
+    });
+
+    test('a body over the limit is refused with 413, and nothing is written',
+        () async {
+      final response = await upload(
+          'path=big.bin', Uint8List(FileBridge.maxUploadBytes + 1));
+      expect(response.statusCode, 413);
+      expect(jsonDecode(response.body)['error'], contains('25 MB'));
+      expect(File('${paths.filesRoot}big.bin').existsSync(), isFalse);
+    });
+
+    test('a stream that turns out too large stops, and leaves the old file',
+        () async {
+      // No Content-Length to refuse up front: counted as it arrives.
+      final bridge = FileBridge(paths: paths);
+      await File('${paths.filesRoot}keep.bin').writeAsBytes([9]);
+      final result = await bridge.upload(
+        'keep.bin',
+        null,
+        Stream.fromIterable([List.filled(60, 1), List.filled(60, 2)]),
+        maxBytes: 100,
+      );
+      expect(result, isA<UploadTooLarge>());
+      expect(File('${paths.filesRoot}keep.bin').readAsBytesSync(), [9]);
+      expect(File('${paths.filesRoot}keep.bin.part').existsSync(), isFalse);
+    });
+
+    test('a client that goes away mid-body leaves nothing behind', () async {
+      final bridge = FileBridge(paths: paths);
+      final body = StreamController<List<int>>();
+      final result = bridge.upload('cut.bin', null, body.stream);
+      body.add([1, 2, 3]);
+      body.addError(const HttpException('Connection closed while receiving data'));
+      await body.close();
+      expect(await result, isA<UploadFailed>());
+      expect(File('${paths.filesRoot}cut.bin').existsSync(), isFalse);
+      expect(File('${paths.filesRoot}cut.bin.part').existsSync(), isFalse);
     });
   });
 

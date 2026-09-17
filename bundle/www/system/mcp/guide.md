@@ -58,6 +58,7 @@ nothing else: there is no npm, and the phone may well be offline.
 | `acelery/ui.js` | rendering, hooks, components, forms, theming |
 | `acelery/sql.js` | SQLite: `openDB`, `deleteDB` |
 | `acelery/file.js` | files under the aCelery folder |
+| `acelery/picker.js` | let the user pick files and photos; crop and shrink pictures |
 | `acelery/http.js` | outbound HTTP through the phone |
 | `acelery/export.js` | share a file, close the app |
 | `acelery/chart.js` | charts (Chart.js); a separate import because it is large |
@@ -180,6 +181,37 @@ const one = await db.selectOne("select sum(ml) as total from drink");
   - `saveFile(mime, filename, text)` hands a file to the user, through the
     share sheet on the phone or as a download in a browser.
   - `closeApp()` returns to aCelery.
+
+## Photos and files the user picks
+
+`acelery/picker.js` opens a picker and gives you `File` objects. It uses the
+page's own file input, so the file comes from wherever the user is: the
+phone's gallery, camera or documents in the aCelery app, or the other
+computer's disk when the app is opened from a browser on the network.
+
+```js
+import { pickImages, pickFiles, shrinkImage } from "acelery/picker.js";
+import * as file from "acelery/file.js";
+import { ImageCropper } from "acelery/ui.js";
+```
+
+- `pickImages({ multiple?, camera? })` and `pickFiles({ accept?, multiple?,
+  capture? })` return `File[]`, empty when the user cancels. **Call them from
+  a click handler**: browsers open a picker only in answer to a tap.
+- `shrinkImage(file, { maxSide = 1600, type = "image/jpeg", quality })` and
+  `cropImage(file, area, { maxSide = 1024, … })` return a smaller `Blob`. A
+  camera photo is several MB; shrink or crop before storing.
+- `<${ImageCropper} image=${file} shape="round" aspect=${1} onDone=${(blob) =>
+  …} onCancel=${…} />` is a dialog to drag and pinch a frame over the picture.
+  It is open while `image` is set.
+- `file.writeBytes(path, blob)` stores bytes (at most 25 MB) under `files/`,
+  and `file.url(path)` gives an address for `<img src>`. Keep an app's files
+  in a folder named after it, e.g. `Garden/photos/12.jpg`, and store that path
+  in the database, not the bytes.
+- Choose the stored name yourself. The picked file's name comes from the
+  user's device and may be anything.
+
+The Example app's Photo screen does all of this.
 
 ## Theming
 

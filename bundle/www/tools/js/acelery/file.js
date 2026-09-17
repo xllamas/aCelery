@@ -1,4 +1,4 @@
-import { get, getText, postText } from "./bridge.js";
+import { get, getText, postBytes, postText, url as bridgeUrl } from "./bridge.js";
 class FileHandle {
   constructor(handle) {
     this.handle = handle;
@@ -60,11 +60,23 @@ async function externalStoragePath() {
   const { extpath } = await get({ opt: "file", action: "getextpath" });
   return extpath;
 }
+async function writeBytes(path, data, basePath) {
+  const { size } = await postBytes(
+    { opt: "file", action: "upload", path, bpath: basePath },
+    data
+  );
+  return size;
+}
+function url(path, basePath) {
+  return bridgeUrl({ opt: "file", action: "raw", path, bpath: basePath });
+}
 export {
   FileHandle,
   externalStoragePath,
   listFiles,
   mkdir,
-  open
+  open,
+  url,
+  writeBytes
 };
 //# sourceMappingURL=file.js.map

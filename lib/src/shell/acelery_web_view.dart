@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
+import 'file_chooser.dart';
 import 'host_bridge.dart';
 
 /// A WebView configured the way `ACeleryActivity` configured its own.
@@ -79,10 +80,33 @@ class ACeleryWebViewState extends State<ACeleryWebView> {
         return await _showConfirm(request.message) ?? false;
       });
       platform.setUseWideViewPort(true);
+      // <input type="file">: the WebView asks the host to show a chooser, and
+      // without an answer nothing opens. A browser on the network needs none
+      // of this, and neither does WKWebView (doc/pickers-evaluation.md).
+      platform.setOnShowFileSelector(_chooseFiles);
     }
 
     _controller.loadRequest(widget.initialUrl);
     widget.onControllerReady?.call(_controller);
+  }
+
+  static final FileChooser _chooser = FileChooser();
+
+  Future<List<String>> _chooseFiles(FileSelectorParams params) async {
+    final plan = planChooser(
+      accept: params.acceptTypes,
+      multiple: params.mode == FileSelectorMode.openMultiple,
+      capture: params.isCaptureEnabled,
+      save: params.mode == FileSelectorMode.save,
+    );
+    try {
+      return await _chooser.choose(plan);
+    } on Exception catch (e) {
+      // A picker already open, a camera app missing: the input stays empty,
+      // and the page is told the pick was cancelled.
+      debugPrint('aCelery: file chooser failed: $e');
+      return const [];
+    }
   }
 
   FutureOr<NavigationDecision> _onNavigationRequest(NavigationRequest request) {

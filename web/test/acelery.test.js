@@ -137,6 +137,34 @@ test("an error with no JSON body still throws something readable", async () => {
   await assert.rejects(() => new sql.Database(1).select("select 1"), /400/);
 });
 
+test("file.writeBytes posts the bytes as they are, and url names the raw route", async () => {
+  const calls = stubFetch(() => ({ json: { size: 3 } }));
+  const bytes = new Uint8Array([0, 255, 128]);
+
+  assert.equal(await file.writeBytes("Garden/rose 1.jpg", bytes), 3);
+  assert.equal(calls[0].method, "POST");
+  assert.deepEqual(calls[0].params, {
+    opt: "file", action: "upload", path: "Garden/rose 1.jpg",
+  });
+  assert.equal(calls[0].body, bytes, "not stringified or re-encoded");
+
+  await file.writeBytes("icon.png", bytes, "/root/aCelery/www/user/");
+  assert.equal(calls[1].params.bpath, "/root/aCelery/www/user/");
+
+  const address = new URL(file.url("Garden/rose 1.jpg"), "http://phone");
+  assert.equal(address.pathname, "/android.itf");
+  assert.deepEqual(Object.fromEntries(address.searchParams), {
+    opt: "file", action: "raw", path: "Garden/rose 1.jpg",
+  });
+});
+
+test("a refused upload throws with the host's message", async () => {
+  stubFetch(() => ({ status: 413, text: JSON.stringify({ error: "The file is larger than 25 MB" }) }));
+  await assert.rejects(file.writeBytes("big.bin", new Uint8Array(1)), {
+    name: "BridgeError", message: "The file is larger than 25 MB",
+  });
+});
+
 test("file open, write, read and close hit their routes", async () => {
   const calls = stubFetch((c) =>
     c.params.action === "fileread"

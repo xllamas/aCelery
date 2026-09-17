@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart' show databaseFactory;
@@ -7,6 +9,7 @@ import 'bundle_installer.dart';
 import 'paths.dart';
 import 'server/acelery_server.dart';
 import 'serving.dart';
+import 'shell/file_chooser.dart';
 import 'shell/home_shortcuts.dart';
 
 /// Brings the aCelery host up: install the web bundle, then start the server
@@ -18,7 +21,7 @@ class ACeleryRuntime {
 
   /// Bump when `assets/aCelery.zip` changes, so installed devices refresh the
   /// shipped files on their next launch. User content is never touched.
-  static const String bundleVersion = '1.6.8+mcp-m3';
+  static const String bundleVersion = '1.6.9+pickers';
 
   final ACeleryPaths paths;
   final ACeleryServer server;
@@ -45,6 +48,10 @@ class ACeleryRuntime {
     DatabaseFactory? factory,
     int port = ACeleryServer.defaultPort,
   }) async {
+    // What the pickers copied during the last run is no longer referenced by
+    // any page.
+    unawaited(FileChooser.clearAll());
+
     final documents = await getApplicationDocumentsDirectory();
     final paths = ACeleryPaths(documents.path);
 

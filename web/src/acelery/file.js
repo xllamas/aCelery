@@ -6,7 +6,7 @@
  * throws here rather than reading somewhere it should not.
  */
 
-import { get, getText, postText } from "./bridge.js";
+import { get, getText, postBytes, postText, url as bridgeUrl } from "./bridge.js";
 
 export class FileHandle {
   constructor(handle) {
@@ -90,4 +90,33 @@ export async function mkdir(path, basePath) {
 export async function externalStoragePath() {
   const { extpath } = await get({ opt: "file", action: "getextpath" });
   return extpath;
+}
+
+/**
+ * Writes bytes — a picture, or any file the user picked — replacing what was
+ * there. Folders are created as needed. `text` routes above cannot carry
+ * binary data.
+ *
+ * @param {string} path relative to the files directory, e.g. "Garden/rose.jpg"
+ * @param {Blob|ArrayBuffer|Uint8Array} data
+ * @param {string} [basePath] overrides the files directory
+ * @returns {Promise<number>} the size written, in bytes
+ */
+export async function writeBytes(path, data, basePath) {
+  const { size } = await postBytes(
+    { opt: "file", action: "upload", path, bpath: basePath },
+    data,
+  );
+  return size;
+}
+
+/**
+ * An address for a stored file, to put in `<img src>`, a link, or `fetch`.
+ * The host answers with the file's bytes and its content type.
+ *
+ * @param {string} path relative to the files directory
+ * @param {string} [basePath] overrides the files directory
+ */
+export function url(path, basePath) {
+  return bridgeUrl({ opt: "file", action: "raw", path, bpath: basePath });
 }

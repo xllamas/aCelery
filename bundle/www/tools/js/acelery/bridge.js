@@ -54,11 +54,23 @@ async function postText(params, body) {
   if (!response.ok) throw await fail(response);
   return response.text();
 }
+async function postBytes(params, body) {
+  const response = await fetch(url(params), {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/octet-stream" },
+    body
+  });
+  if (!response.ok) throw await fail(response);
+  return response.json();
+}
 export {
   BridgeError,
   get,
   getText,
+  postBytes,
   postJson,
-  postText
+  postText,
+  url
 };
 //# sourceMappingURL=bridge.js.map

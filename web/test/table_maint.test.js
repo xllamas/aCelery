@@ -11,6 +11,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { registerHooks } from "node:module";
+
+/* The import map, as a resolve hook, as ui.test.js has it: the built ui.js
+   imports acelery/picker.js by its bare name. */
+const aceleryDir = join(dirname(fileURLToPath(import.meta.url)),
+  "../../bundle/www/tools/js/acelery");
+registerHooks({
+  resolve(specifier, context, next) {
+    return specifier.startsWith("acelery/")
+      ? {
+          url: pathToFileURL(join(aceleryDir, specifier.slice("acelery/".length))).href,
+          shortCircuit: true,
+        }
+      : next(specifier, context);
+  },
+});
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>");
 globalThis.window = dom.window;

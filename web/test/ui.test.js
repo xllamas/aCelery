@@ -277,6 +277,38 @@ test("a Modal renders its header and body", async () => {
   render(null, host);
 });
 
+test("ImageCropper opens while it has a picture, and Cancel asks to close", async () => {
+  let cancelled = 0;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const draw = (image) => render(html`
+    <${ui.ImageCropper} image=${image} shape="round" title="Your photo"
+      onDone=${() => {}} onCancel=${() => cancelled++} />`, host);
+
+  draw(null);
+  await flush();
+  assert.doesNotMatch(document.body.textContent, /Your photo/, "closed without a picture");
+
+  draw("/android.itf?opt=file&action=raw&path=me.jpg");
+  // The picture's URL is set in an effect, so the crop area comes a render
+  // after the dialog.
+  for (let i = 0; i < 50 && !document.querySelector(".reactEasyCrop_Container"); i++) {
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  assert.match(document.body.textContent, /Your photo/);
+  assert.ok(document.querySelector(".reactEasyCrop_Container"), "the crop area rendered");
+  assert.ok(document.querySelector("#ac-cropper-zoom"), "a zoom slider, not only pinch");
+
+  const buttons = [...document.querySelectorAll(".modal-footer button")];
+  const use = buttons.find((b) => b.textContent.trim() === "Use");
+  assert.ok(use.disabled, "nothing to use until the crop area is known");
+  buttons.find((b) => b.textContent.trim() === "Cancel").click();
+  assert.equal(cancelled, 1);
+
+  render(null, host);
+  host.remove();
+});
+
 test("useDismiss fires for a tap outside and not for one inside", async () => {
   // The hook the overlaid navbar leans on: an inline menu left open is in the
   // way, an overlaid one hides what is under it.

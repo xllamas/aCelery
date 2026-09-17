@@ -11,14 +11,16 @@
     "dom-helpers",
     "htm",
     "invariant",
+    "normalize-wheel",
     "preact",
     "prop-types",
     "react-aria",
     "react-bootstrap",
+    "react-easy-crop",
     "react-lifecycles-compat",
     "react-transition-group",
     "uncontrollable",
     "warning"
   ],
-  "inputs": 281
+  "inputs": 288
 }

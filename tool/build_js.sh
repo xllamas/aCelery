@@ -52,6 +52,9 @@ rm -rf "$OUT"
 # re-bundles this for node, which is why web/test/ui.test.js imports the built
 # browser bundle rather than rebuilding. The check below pins the property
 # instead of trusting the default to stay put.
+# acelery/* is external: ImageCropper imports cropImage from acelery/picker.js
+# by its bare name, so the page loads the one capability module rather than a
+# copy of it inside ui.js.
 # Run from web/, because esbuild resolves --alias targets against the current
 # working directory -- "preact/compat" is only findable from there.
 (cd web && node_modules/.bin/esbuild src/ui/index.js \
@@ -59,6 +62,7 @@ rm -rf "$OUT"
   --format=esm \
   --target=es2022 \
   --minify \
+  --external:acelery/* \
   --alias:react=preact/compat \
   --alias:react-dom=preact/compat \
   --outfile="../$OUT/ui.js" \

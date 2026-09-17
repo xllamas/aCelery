@@ -70,6 +70,16 @@ class ItfHandler {
         },
       );
 
+  /// A failure with a message the page can show, as `bridge.js` reads it.
+  static Response _jsonError(int status, String message) => Response(
+        status,
+        body: jsonEncode({'error': message}),
+        headers: {'Content-Type': 'application/json; charset=utf-8', ..._noCache},
+      );
+
+  static String _tooLarge(int maxBytes) =>
+      'The file is larger than ${maxBytes ~/ (1024 * 1024)} MB';
+
   /// Queries carry SQL base64-encoded, because `btoa()` on the JS side keeps
   /// the statement out of the URL's reserved character set.
   static String? _decodeQuery(String? encoded) {
@@ -271,6 +281,37 @@ class ItfHandler {
           append: q['append'] == 'true',
         );
         return _json(const {});
+
+      case 'upload':
+        // POST, the bytes as the body: pictures and other binaries.
+        final path = q['path'];
+        if (path == null || request.method != 'POST') return _badRequest;
+        final length = request.contentLength;
+        if (length != null && length > FileBridge.maxUploadBytes) {
+          return _jsonError(413, _tooLarge(FileBridge.maxUploadBytes));
+        }
+        return switch (await files.upload(path, q['bpath'], request.read())) {
+          UploadDone(:final size) => _json({'size': size}),
+          UploadRefused() => _jsonError(500, 'Cannot write to "$path"'),
+          UploadTooLarge(:final maxBytes) => _jsonError(413, _tooLarge(maxBytes)),
+          UploadFailed(:final message) => _jsonError(500, message),
+        };
+
+      case 'raw':
+        // GET: a file's bytes with its content type, so an <img> can show a
+        // picture stored outside www/.
+        final path = q['path'];
+        if (path == null) return _badRequest;
+        final file = files.rawFile(path, q['bpath']);
+        if (file == null) return Response.notFound(null, headers: _noCache);
+        return Response.ok(
+          file.openRead(),
+          headers: {
+            'Content-Type': lookupMimeType(file.path) ?? 'application/octet-stream',
+            'Content-Length': '${file.lengthSync()}',
+            ..._noCache,
+          },
+        );
 
       case 'getextpath':
         return _json({'extpath': files.externalStoragePath()});
