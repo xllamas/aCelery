@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older; see data_extraction_rules.xml for why. -->
+<full-backup-content>
+    <exclude domain="root" path="app_flutter/.acelery/" />
+    <exclude domain="root" path="app_flutter/aCelery/cache/" />
+</full-backup-content>

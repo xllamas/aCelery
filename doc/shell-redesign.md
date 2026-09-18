@@ -1083,7 +1083,7 @@ dart run tool/serve.dart           # real server on a temp copy of the bundle
 
 ```sh
 flutter build apk --debug && adb install -r build/app/outputs/flutter-apk/app-debug.apk
-adb shell am start -n com.acelery.acelery/.MainActivity
+adb shell am start -n com.acelery.acelery_v2/com.acelery.acelery.MainActivity
 adb exec-out screencap -p > home.png
 ```
 
