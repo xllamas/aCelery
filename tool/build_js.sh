@@ -117,6 +117,22 @@ NODE
   --metafile=../"$OUT"/.meta-chart.json \
   --log-level=warning)
 
+# 3b. Tables: DataTables 3 with its Bootstrap 5 styling and the Responsive
+#     extension. Its own bundle for the same reason as the charts -- ~55 KB
+#     gzipped that most apps never load -- and acelery/* external for the same
+#     reason too. The stylesheets are bundled as text and injected on first
+#     use, so an app needs the one import and no <link>.
+(cd web && node_modules/.bin/esbuild src/ui/datatable.js \
+  --bundle \
+  --format=esm \
+  --target=es2022 \
+  --minify \
+  --external:acelery/* \
+  --loader:.css=text \
+  --outfile="../$OUT/datatable.js" \
+  --metafile=../"$OUT"/.meta-datatable.json \
+  --log-level=warning)
+
 # 4. The editor: CodeMirror 6, tree-shaken to the six languages the IDE opens
 #    (§3.7). Its own bundle, so a page that does not edit code does not pay
 #    for it -- launcher.html and errorlog.html never load this.

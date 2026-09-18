@@ -38,6 +38,7 @@ machine over the LAN: it is the same transport, not a second implementation.
 | `web/` | JS/CSS sources built into `bundle/www/tools/` |
 | `xscript5/` | the 2014 widget library, still used by `launcher.html` |
 | `doc/` | the assessments and the port plan — read these first |
+| `doc/user-guide.md` | the user's guide, printed into the bundle as a PDF |
 | `tool/` | the build scripts |
 
 ## Writing an app
@@ -67,7 +68,9 @@ export default async function main() {
 `acelery/ui.js` also ships `TableMaint` — declare fields and validators, get a
 working list / record / edit / search screen over a SQLite table, with linked
 child tables. `acelery/chart.js` is a separate import because Chart.js is
-68 KB gzipped and most apps never draw one.
+68 KB gzipped and most apps never draw one. `acelery/datatable.js` is separate
+for the same reason: sortable, searchable, paged tables (DataTables 3), with
+`sqlSource` answering each page from SQLite.
 
 ## Running it
 
@@ -84,8 +87,17 @@ sh tool/build_js.sh              # web/src → bundle/www/tools/
 sh tool/build_bundle.sh          # bundle/ → assets/aCelery.zip
 ```
 
+After editing `doc/user-guide.md`, reprint the PDF that Settings → About links
+to. It needs Chrome, Chromium or Edge on the machine; the output is committed,
+so a checkout without one still packs a working bundle.
+
+```sh
+node tool/build_guide.mjs        # doc/user-guide.md → bundle/www/system/doc/
+```
+
 Then bump `ACeleryRuntime.bundleVersion` so installed devices pick the change
-up. A test fails if the zip goes stale, and another if the built JS does.
+up. A test fails if the zip goes stale, another if the built JS does, and
+another if the guide PDF was never reprinted.
 
 ```sh
 flutter test                     # the host, the bridge, and the bundle's shape
@@ -136,6 +148,7 @@ and the alternatives that lost.
 - **CodeMirror 6** for the on-device editor — the only one of the major editors
   with practical touch support
 - **Chart.js 4**, opt-in
+- **DataTables 3** with its Bootstrap 5 styling and Responsive, opt-in, and no jQuery
 - ES modules with an import map; an async `fetch` bridge with bound SQL
   parameters
 
@@ -143,7 +156,8 @@ and the alternatives that lost.
 
 The Flutter port and the bundle modernisation are complete: phases 0–4 of
 `doc/web-bundle-port-plan.md`. The bundle went from 7.3 MB and 690 files to
-2.1 MB and 70.
+2.1 MB and 70 — 2.7 MB and 82 once the user's guide PDF is counted, which is
+the one thing in there a device could have fetched instead of carrying.
 
 Verified on an Android API 36 emulator. **Not yet verified on iOS** — in
 particular the native date pickers (`doc/js-ui-framework-evaluation.md` §9.9).

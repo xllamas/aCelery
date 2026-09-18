@@ -62,6 +62,7 @@ nothing else: there is no npm, and the phone may well be offline.
 | `acelery/http.js` | outbound HTTP through the phone |
 | `acelery/export.js` | share a file, close the app |
 | `acelery/chart.js` | charts (Chart.js); a separate import because it is large |
+| `acelery/datatable.js` | sortable, searchable, paged tables (DataTables 3); also separate |
 
 ## Rendering: Preact and htm
 
@@ -142,6 +143,16 @@ const FIELDS = [
 - `Chart` and `fromRows` come from `acelery/chart.js`.
   `<${Chart} type="bar" data=${fromRows(rows, "label_col", "value_col")} />`.
   The types are `bar`, `line`, `pie` and `doughnut`.
+- `DataTable`, `DataTables` and `sqlSource` come from `acelery/datatable.js`.
+  `<${DataTable} source=${sqlSource(db, "person")} columns=${[{ data: "mname",
+  title: "Name" }]} onRowClick=${(row) => open(row.rowid)} />` pages, sorts
+  and searches in SQL. Use `rows=${rows}` instead of `source` for rows you
+  already have. `sqlSource(db, { table, where, args })` or
+  `sqlSource(db, { query, args })` narrows the data or joins tables. `columns`
+  follow DataTables' options, and any other DataTables option goes in
+  `options`. **There is no jQuery**, so never write `$("#t").DataTable()`.
+  Cells render as text. A column that needs markup supplies its own `render`,
+  and must escape what it inserts. Change `refresh` to re-query after a write.
 
 ## Data: SQLite
 

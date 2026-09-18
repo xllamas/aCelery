@@ -292,6 +292,15 @@ NavigationOutcome decideNavigation(String url) {
     if (!isLocal) return DivertToHost(OpenExternalMessage(url: url));
   }
 
+  // A WebView will not show a PDF: Android's renders a blank page, and the
+  // user is left with nothing. The guide the About screen links to therefore
+  // goes to the host, which hands it to whatever reads PDFs on the device.
+  // A remote address never reaches here -- it is diverted above -- so this is
+  // the bundle's own files, and the same link in a browser simply opens.
+  if (uri.path.endsWith('.pdf')) {
+    return DivertToHost(DownloadMessage(url: url));
+  }
+
   if (uri.path.endsWith('android.itf')) {
     final opt = uri.queryParameters['opt'];
     final action = uri.queryParameters['action'];

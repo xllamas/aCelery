@@ -1006,6 +1006,39 @@ void main() {
       expect(chart.lengthSync(), lessThan(260 * 1024),
           reason: '${chart.lengthSync()} bytes — §3.8 measured ~203 KB raw');
     });
+
+    test('tables ship separately, with preact from ui.js', () {
+      // DataTables is ~55 KB gzipped with its stylesheets; an app pays for it
+      // only by importing acelery/datatable.js, as with the charts.
+      final table = File('${acelery.path}/datatable.js');
+      expect(table.existsSync(), isTrue);
+      final ui = File('${acelery.path}/ui.js').readAsStringSync();
+      expect(ui, isNot(contains('DataTables')));
+      final source = table.readAsStringSync();
+      expect(source, contains('acelery/ui.js'),
+          reason: 'datatable.js must import preact through ui.js');
+    });
+
+    test('tables need no jQuery and never alert()', () {
+      // DataTables 3 dropped jQuery. Its default error mode is a native
+      // alert(), which in a WebView is a dialog with no context; the wrapper
+      // turns that off and shows the message in the page.
+      final source = File('web/src/ui/datatable.js').readAsStringSync();
+      expect(source, contains('errMode = "none"'));
+      expect(source, contains('DataTables.render.text()'),
+          reason: 'cells must render as text unless a column says otherwise');
+      final lock = File('web/package-lock.json').readAsStringSync();
+      expect(lock, isNot(contains('node_modules/jquery"')));
+    });
+
+    test('the table bundle stays within the budget it was measured at', () {
+      final table = File('${acelery.path}/datatable.js');
+      final gzipped = gzip.encode(table.readAsBytesSync()).length;
+      expect(table.lengthSync(), lessThan(210 * 1024),
+          reason: '${table.lengthSync()} bytes — measured ~178 KB raw');
+      expect(gzipped, lessThan(64 * 1024),
+          reason: '$gzipped bytes gzipped — measured ~55 KB');
+    });
   });
 
   group('the collapsed navbar overlays rather than pushing the page', () {
@@ -1115,6 +1148,32 @@ void main() {
       expect(listing, contains('aCelery/www/tools/css/themes/acelery.css'));
       expect(listing, contains('aCelery/www/tools/js/acelery/sql.js'));
       expect(listing, contains('aCelery/www/tools/js/acelery/ui.js'));
+      expect(listing, contains('aCelery/www/tools/js/acelery/datatable.js'));
+      // Settings -> About links to it, and it has to be on the device: the
+      // phone may be offline, and there is nowhere else to fetch it from.
+      expect(listing, contains('aCelery/www/system/doc/aCelery-guide.pdf'));
+    });
+
+    test('the guide PDF is not stale', () {
+      // tool/build_guide.mjs stamps the PDF with a hash of the Markdown it was
+      // printed from. The PDF itself cannot be compared -- Chrome writes a
+      // creation date into it, so two prints of one source differ -- and an
+      // edit to the guide that was never printed would otherwise ship the old
+      // document to devices.
+      final stamp = File('bundle/www/system/doc/.source.sha256');
+      expect(stamp.existsSync(), isTrue,
+          reason: 'no build stamp; run: node tool/build_guide.mjs');
+      expect(File('bundle/www/system/doc/aCelery-guide.pdf').existsSync(),
+          isTrue);
+
+      final source = File('doc/user-guide.md');
+      expect(source.existsSync(), isTrue);
+      expect(
+        sha256.convert(source.readAsBytesSync()).toString(),
+        stamp.readAsStringSync().trim(),
+        reason: 'doc/user-guide.md has changed since the PDF was built; run: '
+            'node tool/build_guide.mjs',
+      );
     });
   });
 }

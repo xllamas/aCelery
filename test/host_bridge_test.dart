@@ -143,6 +143,21 @@ void main() {
       expect((outcome as DivertToHost).message, isA<DownloadMessage>());
     });
 
+    test('the guide PDF is handed to the host', () {
+      // A WebView renders nothing for a PDF, so the link must not be followed.
+      final outcome =
+          decideNavigation('http://localhost:8123/system/doc/aCelery-guide.pdf');
+      expect(outcome, isA<DivertToHost>());
+      expect((outcome as DivertToHost).message, isA<DownloadMessage>());
+    });
+
+    test('a remote PDF still opens outside the WebView', () {
+      // Diverting it as a download would have the host fetch someone else's
+      // file and hand it to the share sheet; the browser is the right place.
+      final outcome = decideNavigation('https://example.com/manual.pdf');
+      expect((outcome as DivertToHost).message, isA<OpenExternalMessage>());
+    });
+
     test('an external link opens outside the WebView', () {
       final outcome = decideNavigation('https://example.com/docs');
       expect(outcome, isA<DivertToHost>());

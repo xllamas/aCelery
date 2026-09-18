@@ -1,4 +1,4 @@
-import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,Button as Gn,applyTheme as fa,isDark as ma}from"acelery/ui.js";import{EDITOR_THEMES as zn}from"acelery/editor.js";import{html as U,useState as Fa}from"acelery/ui.js";import{useState as wa,useEffect as ga}from"acelery/ui.js";function ka(e){let t=String(e??"").replace(/^#\/?/,"").split("/").filter(Boolean).map(Sa);return{section:t[0]??"home",parts:t.slice(1)}}function Sa(e){try{return decodeURIComponent(e)}catch{return e}}function G(e){return"#/"+e.map(t=>encodeURIComponent(t)).join("/")}var be=()=>window.location.hash||"#/",Ue=new Set;function Ke(){for(let e of Ue)e(be())}var ht=!1;function Ca(){ht||(ht=!0,window.addEventListener("popstate",Ke),window.addEventListener("hashchange",Ke))}var X=null;function vt(e){return X=e,()=>{X===e&&(X=null)}}async function h(e,{replace:t=!1}={}){let a=G(e);a!==be()&&(X&&!await X()||(t?window.history.replaceState({from:window.history.state?.from??null},"",a):window.history.pushState({from:be()},"",a),Ke()))}async function yt(e){let t=G(e);if(window.history.state?.from===t){if(X&&!await X())return;window.history.back()}else await h(e,{replace:!0})}function bt(){Ca();let[e,t]=wa(be());return ga(()=>(Ue.add(t),t(be()),()=>Ue.delete(t)),[]),ka(e)}function wt(){new URLSearchParams(window.location.search).get("opt")==="apps"&&window.history.replaceState(null,"",window.location.pathname+G(["apps"]))}var Ge=null;function we(e){Ge=e}function Ae(e){return Ge!==e?!1:(Ge=null,!0)}import{html as w,useState as Ie,useEffect as xa,useCallback as Da,useContext as Ea,useRef as St,createContext as Ta,Modal as Pe,Dropdown as Le,Placeholder as gt,Alert as Aa,Toast as La,Button as eo}from"acelery/ui.js";var g=({name:e})=>w`<i class=${e} aria-hidden="true"></i>`,Pa="(min-width: 768px)",Ct="(min-width: 992px)";function ze(e){let t=()=>!!globalThis.matchMedia?.(e).matches,[a,n]=Ie(t);return xa(()=>{let o=globalThis.matchMedia?.(e);if(!o?.addEventListener)return;let i=()=>n(o.matches);return i(),o.addEventListener("change",i),()=>o.removeEventListener("change",i)},[e]),a}function H({icon:e,label:t,onClick:a,disabled:n,primary:o,className:i}){return w`
+import{html as R,render as Kn,useState as da,useEffect as ua,useCallback as Gn,Button as zn,applyTheme as fa,isDark as ma}from"acelery/ui.js";import{EDITOR_THEMES as Jn}from"acelery/editor.js";import{html as U,useState as Fa}from"acelery/ui.js";import{useState as wa,useEffect as ga}from"acelery/ui.js";function ka(e){let t=String(e??"").replace(/^#\/?/,"").split("/").filter(Boolean).map(Sa);return{section:t[0]??"home",parts:t.slice(1)}}function Sa(e){try{return decodeURIComponent(e)}catch{return e}}function G(e){return"#/"+e.map(t=>encodeURIComponent(t)).join("/")}var be=()=>window.location.hash||"#/",Ue=new Set;function Ke(){for(let e of Ue)e(be())}var ht=!1;function Ca(){ht||(ht=!0,window.addEventListener("popstate",Ke),window.addEventListener("hashchange",Ke))}var ee=null;function vt(e){return ee=e,()=>{ee===e&&(ee=null)}}async function h(e,{replace:t=!1}={}){let a=G(e);a!==be()&&(ee&&!await ee()||(t?window.history.replaceState({from:window.history.state?.from??null},"",a):window.history.pushState({from:be()},"",a),Ke()))}async function yt(e){let t=G(e);if(window.history.state?.from===t){if(ee&&!await ee())return;window.history.back()}else await h(e,{replace:!0})}function bt(){Ca();let[e,t]=wa(be());return ga(()=>(Ue.add(t),t(be()),()=>Ue.delete(t)),[]),ka(e)}function wt(){new URLSearchParams(window.location.search).get("opt")==="apps"&&window.history.replaceState(null,"",window.location.pathname+G(["apps"]))}var Ge=null;function we(e){Ge=e}function Ae(e){return Ge!==e?!1:(Ge=null,!0)}import{html as w,useState as Ie,useEffect as xa,useCallback as Da,useContext as Ea,useRef as St,createContext as Ta,Modal as Pe,Dropdown as Le,Placeholder as gt,Alert as Aa,Toast as La,Button as to}from"acelery/ui.js";var g=({name:e})=>w`<i class=${e} aria-hidden="true"></i>`,Pa="(min-width: 768px)",Ct="(min-width: 992px)";function ze(e){let t=()=>!!globalThis.matchMedia?.(e).matches,[a,n]=Ie(t);return xa(()=>{let o=globalThis.matchMedia?.(e);if(!o?.addEventListener)return;let i=()=>n(o.matches);return i(),o.addEventListener("change",i),()=>o.removeEventListener("change",i)},[e]),a}function H({icon:e,label:t,onClick:a,disabled:n,primary:o,className:i}){return w`
     <button type="button" aria-label=${t} title=${t}
       class=${`ac-iconbtn${o?" is-primary":""} ${i??""}`}
       disabled=${!!n} onClick=${a}>
@@ -56,7 +56,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
             <${Pe.Title} as="h2" className="fs-5">${a}<//>
           <//>`:null}
       ${n}
-    <//>`}function ee({label:e="More actions",title:t,actions:a}){let n=ze(Pa),[o,i]=Ie(!1),r=St(null),s=a.filter(Boolean);return s.length?n?w`
+    <//>`}function te({label:e="More actions",title:t,actions:a}){let n=ze(Pa),[o,i]=Ie(!1),r=St(null),s=a.filter(Boolean);return s.length?n?w`
       <${Le} align="end" className="ac-over">
         <${Le.Toggle} as="button" type="button" bsPrefix="ac-iconbtn"
                             aria-label=${e} title=${e}>
@@ -109,7 +109,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
     <div class="ac-card">
       <div class="ac-card-head">
         <${Je} name=${e.name} icon=${e.icon} />
-        <${ee} title=${e.name} label=${`Actions for ${e.name}`}
+        <${te} title=${e.name} label=${`Actions for ${e.name}`}
           actions=${n} />
       </div>
       <h3 class="ac-card-title">
@@ -129,7 +129,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
         ${a?w`<div class="ac-row-meta">${a}</div>`:null}
       </div>
       ${r?w`<span class="ac-badge">${r}</span>`:null}
-      ${i?w`<${ee} title=${t} label=${`Actions for ${t}`}
+      ${i?w`<${te} title=${t} label=${`Actions for ${t}`}
                  actions=${i} />`:null}
     </div>`}var Ma=[{key:"home",path:[],label:"Home",icon:"fa-solid fa-house"},{key:"apps",path:["apps"],label:"Apps",icon:"fa-solid fa-table-cells"},{key:"code",path:["code"],label:"Code",icon:"fa-solid fa-code"},{key:"data",path:["data"],label:"Data",icon:"fa-solid fa-database"},{key:"settings",path:["settings"],label:"Settings",icon:"fa-solid fa-gear"}];function Et({section:e}){return Ma.map(t=>U`
       <a key=${t.key} href=${G(t.path)}
@@ -176,9 +176,9 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
               <${g} name=${i.icon} />
               <span class="ac-fab-label" aria-hidden="true">${i.label}</span>
             </button>`:null}
-    </section>`}import*as I from"acelery/file.js";import{openDB as At}from"acelery/sql.js";var Tt="/system/scaffold/",ja=/\{\{name\}\}/g;function Ba(e,t){let a=new RegExp(e.namePattern),{messages:n}=e;return{entry:e.entry,nameProblem(o){let i=(o??"").trim();return i?a.test(i)?null:n.nameInvalid:n.nameRequired},descriptionProblem(o){return(o??"").length<=e.descriptionMax?null:n.descriptionTooLong},projectName(o){let i=o.trim();return i.charAt(0).toUpperCase()+i.slice(1)},files(o,i){let r={"acelery_app.json":JSON.stringify({name:o,description:i??"",entry:e.entry})};for(let s of Object.keys(e.templates))r[s]=t[s].replace(ja,o);return r}}}var Qe=null;function je(){return Qe??=(async()=>{let e=async n=>{let o=await fetch(Tt+n);if(!o.ok)throw new Error(`${Tt}${n}: ${o.status}`);return o.text()},t=JSON.parse(await e("scaffold.json")),a={};for(let[n,o]of Object.entries(t.templates))a[n]=await e(o);return Ba(t,a)})().catch(e=>{throw Qe=null,e}),Qe}async function Lt(){let e=await At("acelery.db");try{await e.exec("create table if not exists config (cfg_key text unique, cfg_value text)");let t=await e.select("select cfg_key, cfg_value from config");return Object.fromEntries(t.map(a=>[a.cfg_key,a.cfg_value]))}finally{await e.close()}}async function Pt(e){let t=await At("acelery.db");try{await t.exec("create table if not exists config (cfg_key text unique, cfg_value text)");for(let[a,n]of Object.entries(e))await t.exec("insert into config (cfg_key, cfg_value) values (?, ?) on conflict(cfg_key) do update set cfg_value = excluded.cfg_value",[a,n??""])}finally{await t.close()}}var Ve=null;function It(){return Ve??=I.externalStoragePath().catch(e=>{throw Ve=null,e}),Ve}async function K(){return await It()+"/aCelery/www/user/"}async function Ra(){return await It()+"/aCelery/"}function Ha(e,t){return typeof t!="string"||!/^[\w.-]+(\/[\w.-]+)*$/.test(t)||t.split("/").includes("..")?null:`/user/${encodeURIComponent(e)}/${t}`}async function Ye(e,t){t??=await K();try{let a=await I.open("acelery_app.json",t+e),n=await a.read();await a.close();let o=n?JSON.parse(n):{};return{description:typeof o.description=="string"?o.description:"",entry:typeof o.entry=="string"&&o.entry?o.entry:"main.js",icon:Ha(e,o.icon)}}catch{return{description:"",entry:"main.js",icon:null}}}async function de(){let e=await K(),t=await I.listFiles("user",e.replace(/user\/$/,"")),a=[];for(let n of t)n.directory&&a.push({name:n.fname,...await Ye(n.fname,e)});return a.sort((n,o)=>n.name.localeCompare(o.name))}async function Ft(e){let t=await K();return(await I.listFiles("user",t.replace(/user\/$/,""))).some(n=>n.directory&&n.fname===e)}async function Be(e){return(await I.listFiles(e,await K())).filter(a=>!a.directory).map(a=>({name:a.fname,length:a.length,modified:a.lastmodified})).sort((a,n)=>a.name.localeCompare(n.name))}async function Mt(e,t){let a=await I.open(t,await K()+e);try{return await a.read()}finally{await a.close()}}async function ge(e,t,a){let n=await I.open(t,await K()+e);try{await n.write(a)}finally{await n.close()}}async function jt(e,t){await(await I.open(t,await K()+e)).delete()}async function ue(e){await(await I.open(e,await K())).delete()}async function Bt({name:e,description:t}){let a=await je(),n=a.projectName(e),o=await K();await I.mkdir(n,o);for(let[i,r]of Object.entries(a.files(n,t)))await ge(n,i,r);return n}async function ke(){return(await I.listFiles("db",await Ra())).filter(t=>!t.directory&&!t.fname.includes("journal")).map(t=>({name:t.fname,length:t.length,modified:t.lastmodified})).sort((t,a)=>t.name.localeCompare(a.name))}async function Rt(e){return(await ke()).some(t=>t.name===e)}function Re(e){if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(e))throw new Error(`"${e}" is not a usable table name`);return e}function te(){return!!globalThis.ACeleryHost}function Ht(){return te()&&/\bAndroid\b/.test(globalThis.navigator?.userAgent??"")}function ae(e){globalThis.ACeleryHost?.postMessage(JSON.stringify(e))}function fe(e){return typeof e!="number"||!Number.isFinite(e)?"":e<1024?`${e} B`:e<1024*1024?`${(e/1024).toFixed(e<10240?1:0)} KB`:`${(e/1024/1024).toFixed(1)} MB`}function Ot(e){if(typeof e!="number"||!e)return"";let t=new Date(e);return t.toDateString()===new Date().toDateString()?t.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):t.toLocaleDateString([],{day:"numeric",month:"short",year:"numeric"})}import{html as W,useState as qt,useEffect as Oa,Button as Se}from"acelery/ui.js";import{runApp as _t}from"acelery/export.js";function qa(e=new Date){let t=e.getHours();return t<5?"Working late":t<12?"Good morning":t<18?"Good afternoon":"Good evening"}var Nt=e=>t=>{t.button!==0||t.metaKey||t.ctrlKey||t.shiftKey||t.altKey||(t.preventDefault(),h(e))};function Ut({settings:e,updateSettings:t}){let[a,n]=qt(null),[o,i]=qt(null);Oa(()=>{let v=!0;return(async()=>{try{let[$,m]=await Promise.all([de(),ke()]);if(!v)return;n({projects:$,databases:m});let S={},T=e["recent.project"];T&&!$.some(C=>C.name===T)&&(S["recent.project"]="",S["recent.file"]="");let b=e["recent.db"];b&&!m.some(C=>C.name===b)&&(S["recent.db"]=""),Object.keys(S).length&&t(S)}catch($){if(!v)return;i($),n({projects:[],databases:[]})}})(),()=>{v=!1}},[]);let r=a?.projects.find(v=>v.name===e["recent.project"]),s=r?e["recent.file"]:"",c=a?.databases.find(v=>v.name===e["recent.db"]),d=a?.projects.find(v=>v.name==="Example"),l=()=>{we("new-project"),h(["code"])},u=()=>{we("new-db"),h(["data"])},y;a?r||c?y=W`
+    </section>`}import*as I from"acelery/file.js";import{openDB as At}from"acelery/sql.js";var Tt="/system/scaffold/",ja=/\{\{name\}\}/g;function Ba(e,t){let a=new RegExp(e.namePattern),{messages:n}=e;return{entry:e.entry,nameProblem(o){let i=(o??"").trim();return i?a.test(i)?null:n.nameInvalid:n.nameRequired},descriptionProblem(o){return(o??"").length<=e.descriptionMax?null:n.descriptionTooLong},projectName(o){let i=o.trim();return i.charAt(0).toUpperCase()+i.slice(1)},files(o,i){let r={"acelery_app.json":JSON.stringify({name:o,description:i??"",entry:e.entry})};for(let s of Object.keys(e.templates))r[s]=t[s].replace(ja,o);return r}}}var Qe=null;function je(){return Qe??=(async()=>{let e=async n=>{let o=await fetch(Tt+n);if(!o.ok)throw new Error(`${Tt}${n}: ${o.status}`);return o.text()},t=JSON.parse(await e("scaffold.json")),a={};for(let[n,o]of Object.entries(t.templates))a[n]=await e(o);return Ba(t,a)})().catch(e=>{throw Qe=null,e}),Qe}async function Lt(){let e=await At("acelery.db");try{await e.exec("create table if not exists config (cfg_key text unique, cfg_value text)");let t=await e.select("select cfg_key, cfg_value from config");return Object.fromEntries(t.map(a=>[a.cfg_key,a.cfg_value]))}finally{await e.close()}}async function Pt(e){let t=await At("acelery.db");try{await t.exec("create table if not exists config (cfg_key text unique, cfg_value text)");for(let[a,n]of Object.entries(e))await t.exec("insert into config (cfg_key, cfg_value) values (?, ?) on conflict(cfg_key) do update set cfg_value = excluded.cfg_value",[a,n??""])}finally{await t.close()}}var Ve=null;function It(){return Ve??=I.externalStoragePath().catch(e=>{throw Ve=null,e}),Ve}async function K(){return await It()+"/aCelery/www/user/"}async function Ra(){return await It()+"/aCelery/"}function Ha(e,t){return typeof t!="string"||!/^[\w.-]+(\/[\w.-]+)*$/.test(t)||t.split("/").includes("..")?null:`/user/${encodeURIComponent(e)}/${t}`}async function Ye(e,t){t??=await K();try{let a=await I.open("acelery_app.json",t+e),n=await a.read();await a.close();let o=n?JSON.parse(n):{};return{description:typeof o.description=="string"?o.description:"",entry:typeof o.entry=="string"&&o.entry?o.entry:"main.js",icon:Ha(e,o.icon)}}catch{return{description:"",entry:"main.js",icon:null}}}async function de(){let e=await K(),t=await I.listFiles("user",e.replace(/user\/$/,"")),a=[];for(let n of t)n.directory&&a.push({name:n.fname,...await Ye(n.fname,e)});return a.sort((n,o)=>n.name.localeCompare(o.name))}async function Ft(e){let t=await K();return(await I.listFiles("user",t.replace(/user\/$/,""))).some(n=>n.directory&&n.fname===e)}async function Be(e){return(await I.listFiles(e,await K())).filter(a=>!a.directory).map(a=>({name:a.fname,length:a.length,modified:a.lastmodified})).sort((a,n)=>a.name.localeCompare(n.name))}async function Mt(e,t){let a=await I.open(t,await K()+e);try{return await a.read()}finally{await a.close()}}async function ge(e,t,a){let n=await I.open(t,await K()+e);try{await n.write(a)}finally{await n.close()}}async function jt(e,t){await(await I.open(t,await K()+e)).delete()}async function ue(e){await(await I.open(e,await K())).delete()}async function Bt({name:e,description:t}){let a=await je(),n=a.projectName(e),o=await K();await I.mkdir(n,o);for(let[i,r]of Object.entries(a.files(n,t)))await ge(n,i,r);return n}async function ke(){return(await I.listFiles("db",await Ra())).filter(t=>!t.directory&&!t.fname.includes("journal")).map(t=>({name:t.fname,length:t.length,modified:t.lastmodified})).sort((t,a)=>t.name.localeCompare(a.name))}async function Rt(e){return(await ke()).some(t=>t.name===e)}function Re(e){if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(e))throw new Error(`"${e}" is not a usable table name`);return e}function W(){return!!globalThis.ACeleryHost}function Ht(){return W()&&/\bAndroid\b/.test(globalThis.navigator?.userAgent??"")}function ae(e){globalThis.ACeleryHost?.postMessage(JSON.stringify(e))}function fe(e){return typeof e!="number"||!Number.isFinite(e)?"":e<1024?`${e} B`:e<1024*1024?`${(e/1024).toFixed(e<10240?1:0)} KB`:`${(e/1024/1024).toFixed(1)} MB`}function Ot(e){if(typeof e!="number"||!e)return"";let t=new Date(e);return t.toDateString()===new Date().toDateString()?t.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):t.toLocaleDateString([],{day:"numeric",month:"short",year:"numeric"})}import{html as Q,useState as qt,useEffect as Oa,Button as Se}from"acelery/ui.js";import{runApp as _t}from"acelery/export.js";function qa(e=new Date){let t=e.getHours();return t<5?"Working late":t<12?"Good morning":t<18?"Good afternoon":"Good evening"}var Nt=e=>t=>{t.button!==0||t.metaKey||t.ctrlKey||t.shiftKey||t.altKey||(t.preventDefault(),h(e))};function Ut({settings:e,updateSettings:t}){let[a,n]=qt(null),[o,i]=qt(null);Oa(()=>{let v=!0;return(async()=>{try{let[$,m]=await Promise.all([de(),ke()]);if(!v)return;n({projects:$,databases:m});let S={},T=e["recent.project"];T&&!$.some(C=>C.name===T)&&(S["recent.project"]="",S["recent.file"]="");let b=e["recent.db"];b&&!m.some(C=>C.name===b)&&(S["recent.db"]=""),Object.keys(S).length&&t(S)}catch($){if(!v)return;i($),n({projects:[],databases:[]})}})(),()=>{v=!1}},[]);let r=a?.projects.find(v=>v.name===e["recent.project"]),s=r?e["recent.file"]:"",c=a?.databases.find(v=>v.name===e["recent.db"]),d=a?.projects.find(v=>v.name==="Example"),l=()=>{we("new-project"),h(["code"])},u=()=>{we("new-db"),h(["data"])},y;a?r||c?y=Q`
       <div class="ac-continue">
-        ${r?W`
+        ${r?Q`
               <div class="ac-continue-card">
                 <${Je} name=${r.name} icon=${r.icon} />
                 <div class="ac-row-body">
@@ -196,7 +196,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
                   <//>
                 </div>
               </div>`:null}
-        ${c?W`
+        ${c?Q`
               <div class="ac-continue-card">
                 <div class="ac-row-icon" aria-hidden="true">
                   <${g} name="fa-solid fa-database" />
@@ -211,7 +211,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
                   <//>
                 </div>
               </div>`:null}
-      </div>`:y=W`
+      </div>`:y=Q`
       <div class="ac-welcome">
         <h2>Welcome to aCelery</h2>
         <p>
@@ -219,7 +219,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
           run straight away. Try the example, or start your own.
         </p>
         <div class="ac-button-row">
-          ${d?W`<${Se} variant="primary"
+          ${d?Q`<${Se} variant="primary"
                      onClick=${()=>_t(d.name,d.name,!1)}>
                 <${g} name="fa-solid fa-play" /> Run the Example app
               <//>`:null}
@@ -227,8 +227,8 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
             Create your first app
           <//>
         </div>
-      </div>`:y=W`<${L} rows=${2} />`;let k=v=>v?String(v.length):"\u2013";return W`
-    <${D} title=${W`
+      </div>`:y=Q`<${L} rows=${2} />`;let k=v=>v?String(v.length):"\u2013";return Q`
+    <${D} title=${Q`
       <span class="ac-brand-inline">
         <span class="ac-brand-mark" aria-hidden="true"><${g} name="fa-solid fa-seedling" /></span>
         aCelery
@@ -358,7 +358,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
                   actions=${[{label:"Run",icon:"fa-solid fa-play",onSelect:()=>Za(C.name,C.name,!0)},{label:"Export",icon:"fa-solid fa-file-export",onSelect:()=>Xa(C.name)},{label:"Delete",icon:"fa-solid fa-trash",danger:!0,onSelect:()=>S(C)}]} />`)}
             </div>`:B`<p class="text-body-secondary px-1">Nothing matches “${c}”.</p>`}`}return B`
     <${D} title="Code"
-      actions=${te()?B`<${H} icon="fa-solid fa-file-import" label="Import project"
+      actions=${W()?B`<${H} icon="fa-solid fa-file-import" label="Import project"
                  onClick=${en} />`:null}
       fab=${{icon:"fa-solid fa-plus",label:"New project",onClick:()=>u(!0)}}>
       <${j} error=${r} onClose=${()=>s(null)} />
@@ -367,7 +367,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
     ${o?B`<${tn} show=${l} scaffold=${o}
           existing=${a??[]}
           onClose=${()=>u(!1)} onCreate=${m} />`:null}
-    ${v}`}import{html as x,useState as Q,useEffect as ne,useRef as $e,useCallback as Vt,Button as me,Modal as Yt,Form as an,Input as nn,Select as on,notEmpty as rn}from"acelery/ui.js";import{runApp as sn,exportProject as ln}from"acelery/export.js";var He=e=>e.includes(".")?e.split(".").pop().toLowerCase():"",nt={js:"JavaScript",mjs:"JavaScript",json:"JSON",css:"CSS",html:"HTML",htm:"HTML",xml:"XML",svg:"SVG",md:"Markdown",txt:"Text"},Zt=new Set(["png","jpg","jpeg","gif","webp","bmp","ico"]),cn=new Set(["zip","woff","woff2","ttf","otf","mp3","mp4","pdf","db"]);function dn(e){let t=He(e);return Zt.has(t)?"fa-solid fa-file-image":["md","txt"].includes(t)?"fa-solid fa-file-lines":nt[t]?"fa-solid fa-file-code":"fa-solid fa-file"}function un(e){let t=He(e);return Zt.has(t)?"image":cn.has(t)?"binary":"text"}function fn({show:e,project:t,existing:a,onClose:n,onCreate:o}){return x`
+    ${v}`}import{html as x,useState as V,useEffect as ne,useRef as $e,useCallback as Vt,Button as me,Modal as Yt,Form as an,Input as nn,Select as on,notEmpty as rn}from"acelery/ui.js";import{runApp as sn,exportProject as ln}from"acelery/export.js";var He=e=>e.includes(".")?e.split(".").pop().toLowerCase():"",nt={js:"JavaScript",mjs:"JavaScript",json:"JSON",css:"CSS",html:"HTML",htm:"HTML",xml:"XML",svg:"SVG",md:"Markdown",txt:"Text"},Zt=new Set(["png","jpg","jpeg","gif","webp","bmp","ico"]),cn=new Set(["zip","woff","woff2","ttf","otf","mp3","mp4","pdf","db"]);function dn(e){let t=He(e);return Zt.has(t)?"fa-solid fa-file-image":["md","txt"].includes(t)?"fa-solid fa-file-lines":nt[t]?"fa-solid fa-file-code":"fa-solid fa-file"}function un(e){let t=He(e);return Zt.has(t)?"image":cn.has(t)?"binary":"text"}function fn({show:e,project:t,existing:a,onClose:n,onCreate:o}){return x`
     <${ce} show=${e} onHide=${n} title=${`New file in ${t}`}>
       <${an} initial=${{name:"",type:".js"}} onSubmit=${o}>
         <${Yt.Body}>
@@ -386,7 +386,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
           <//>
         <//>
       <//>
-    <//>`}function Xt({project:e,fileName:t,editorTheme:a,settings:n,updateSettings:o}){let i=ze(Ct),r=O(),{confirm:s,dialog:c}=q(),[d,l]=Q("loading"),[u,y]=Q([]),[k,v]=Q(null),[$,m]=Q(null),[S,T]=Q(!1),[b,C]=Q(null),[re,he]=Q(!1),[Ee,ve]=Q(!1),se=$e(null),A=$e(null),P=$e(!1),V=$e(null);V.current=b;let st=$e(a);st.current=a;let le=f=>{P.current=f,he(f)},lt=Vt(async()=>{y(await Be(e))},[e]);ne(()=>{let f=!0;return(async()=>{try{if(!await Ft(e)){f&&l("missing");return}let[E,F]=await Promise.all([Be(e),Ye(e)]);if(!f)return;y(E),v(F),l("ready")}catch(E){if(!f)return;m(E),l("ready")}})(),()=>{f=!1}},[e]),ne(()=>{d==="ready"&&!t&&n["recent.project"]!==e&&o({"recent.project":e,"recent.file":""})},[d,e,t]),ne(()=>{if(C(null),d!=="ready"||!t)return;let f=!0;return(async()=>{try{let E=await Be(e);if(!f)return;if(!E.some(ba=>ba.name===t)){C({name:t,kind:"missing"});return}let F=un(t),Ne=F==="text"?await Mt(e,t):null;if(!f)return;C({name:t,kind:F,text:Ne}),o({"recent.project":e,"recent.file":t})}catch(E){f&&m(E)}})(),()=>{f=!1}},[e,t,d]);let ye=Vt(async()=>{let f=A.current,E=V.current;if(!f||E?.kind!=="text")return!0;let F=f.getValue();ve(!0);try{return await ge(e,E.name,F),A.current===f&&f.getValue()===F&&le(!1),!0}catch(Ne){return m(Ne),!1}finally{ve(!1)}},[e]),Te=$e(ye);Te.current=ye,ne(()=>{if(b?.kind!=="text"||!se.current)return;let f=b.name,E=globalThis.aceleryEditor.createEditor(se.current,{value:b.text,filename:f,theme:st.current,onChange:()=>{P.current||le(!0)},onSave:()=>Te.current()});return A.current=E,le(!1),()=>{P.current&&(ge(e,f,E.getValue()).catch(F=>console.error(`aCelery: could not save ${f}`,F)),P.current=!1),E.destroy(),A.current===E&&(A.current=null)}},[b]),ne(()=>{A.current?.setTheme(a)},[a]),ne(()=>(globalThis.forceSaveFile=()=>{P.current&&Te.current()},()=>{delete globalThis.forceSaveFile}),[]),ne(()=>vt(async()=>{if(!P.current)return!0;let f=await s(`Save your changes to ${V.current?.name??"this file"} before leaving?`,{title:"Unsaved changes",confirmLabel:"Save",cancelLabel:"Discard",dismissValue:null});return f===null?!1:f?Te.current():(le(!1),!0)}),[s]);async function pa(){P.current&&!await ye()||sn(e,e,!0)}async function ha(){P.current&&!await ye()||ln(e)}async function va(f){if(f.duplicate){m(new Error(`${f.duplicate} already exists in ${e}`)),T(!1);return}T(!1);let E=f.name.trim()+f.type;try{await ge(e,E,""),await lt(),h(["code",e,E],{replace:i&&!!t})}catch(F){m(F)}}async function ct(f){if(await s(`${f} will be deleted from ${e}. This cannot be undone.`,{title:`Delete ${f}?`,danger:!0,confirmLabel:"Delete"}))try{f===t&&le(!1),await jt(e,f),await lt(),r(`Deleted ${f}`),f===t&&h(["code",e],{replace:!0})}catch(F){m(F)}}async function ya(){if(await xe(s,e))try{le(!1),await ue(e),n["recent.project"]===e&&o({"recent.project":"","recent.file":""}),r(`Deleted ${e}`),h(["code"],{replace:!0})}catch(f){m(f)}}let dt=f=>h(["code",e,f],{replace:i&&!!t});if(d==="missing")return x`
+    <//>`}function Xt({project:e,fileName:t,editorTheme:a,settings:n,updateSettings:o}){let i=ze(Ct),r=O(),{confirm:s,dialog:c}=q(),[d,l]=V("loading"),[u,y]=V([]),[k,v]=V(null),[$,m]=V(null),[S,T]=V(!1),[b,C]=V(null),[re,he]=V(!1),[Ee,ve]=V(!1),se=$e(null),A=$e(null),P=$e(!1),Y=$e(null);Y.current=b;let st=$e(a);st.current=a;let le=f=>{P.current=f,he(f)},lt=Vt(async()=>{y(await Be(e))},[e]);ne(()=>{let f=!0;return(async()=>{try{if(!await Ft(e)){f&&l("missing");return}let[E,F]=await Promise.all([Be(e),Ye(e)]);if(!f)return;y(E),v(F),l("ready")}catch(E){if(!f)return;m(E),l("ready")}})(),()=>{f=!1}},[e]),ne(()=>{d==="ready"&&!t&&n["recent.project"]!==e&&o({"recent.project":e,"recent.file":""})},[d,e,t]),ne(()=>{if(C(null),d!=="ready"||!t)return;let f=!0;return(async()=>{try{let E=await Be(e);if(!f)return;if(!E.some(ba=>ba.name===t)){C({name:t,kind:"missing"});return}let F=un(t),Ne=F==="text"?await Mt(e,t):null;if(!f)return;C({name:t,kind:F,text:Ne}),o({"recent.project":e,"recent.file":t})}catch(E){f&&m(E)}})(),()=>{f=!1}},[e,t,d]);let ye=Vt(async()=>{let f=A.current,E=Y.current;if(!f||E?.kind!=="text")return!0;let F=f.getValue();ve(!0);try{return await ge(e,E.name,F),A.current===f&&f.getValue()===F&&le(!1),!0}catch(Ne){return m(Ne),!1}finally{ve(!1)}},[e]),Te=$e(ye);Te.current=ye,ne(()=>{if(b?.kind!=="text"||!se.current)return;let f=b.name,E=globalThis.aceleryEditor.createEditor(se.current,{value:b.text,filename:f,theme:st.current,onChange:()=>{P.current||le(!0)},onSave:()=>Te.current()});return A.current=E,le(!1),()=>{P.current&&(ge(e,f,E.getValue()).catch(F=>console.error(`aCelery: could not save ${f}`,F)),P.current=!1),E.destroy(),A.current===E&&(A.current=null)}},[b]),ne(()=>{A.current?.setTheme(a)},[a]),ne(()=>(globalThis.forceSaveFile=()=>{P.current&&Te.current()},()=>{delete globalThis.forceSaveFile}),[]),ne(()=>vt(async()=>{if(!P.current)return!0;let f=await s(`Save your changes to ${Y.current?.name??"this file"} before leaving?`,{title:"Unsaved changes",confirmLabel:"Save",cancelLabel:"Discard",dismissValue:null});return f===null?!1:f?Te.current():(le(!1),!0)}),[s]);async function pa(){P.current&&!await ye()||sn(e,e,!0)}async function ha(){P.current&&!await ye()||ln(e)}async function va(f){if(f.duplicate){m(new Error(`${f.duplicate} already exists in ${e}`)),T(!1);return}T(!1);let E=f.name.trim()+f.type;try{await ge(e,E,""),await lt(),h(["code",e,E],{replace:i&&!!t})}catch(F){m(F)}}async function ct(f){if(await s(`${f} will be deleted from ${e}. This cannot be undone.`,{title:`Delete ${f}?`,danger:!0,confirmLabel:"Delete"}))try{f===t&&le(!1),await jt(e,f),await lt(),r(`Deleted ${f}`),f===t&&h(["code",e],{replace:!0})}catch(F){m(F)}}async function ya(){if(await xe(s,e))try{le(!1),await ue(e),n["recent.project"]===e&&o({"recent.project":"","recent.file":""}),r(`Deleted ${e}`),h(["code"],{replace:!0})}catch(f){m(f)}}let dt=f=>h(["code",e,f],{replace:i&&!!t});if(d==="missing")return x`
       <${D} title=${e} back=${["code"]}>
         <${z} what="Project" action=${x`
           <${me} variant="primary" onClick=${()=>h(["code"],{replace:!0})}>
@@ -395,7 +395,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
       <//>`;if(d==="loading")return x`
       <${D} title=${e} back=${["code"]}>
         <${L} rows=${4} />
-      <//>`;let Y=!!t,ut=x`<${j} error=${$} onClose=${()=>m(null)} />`,ft=u.length?x`
+      <//>`;let Z=!!t,ut=x`<${j} error=${$} onClose=${()=>m(null)} />`,ft=u.length?x`
         <div class="ac-list">
           ${u.map(f=>x`
             <${J} key=${f.name} icon=${dn(f.name)} title=${f.name}
@@ -410,37 +410,37 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
             New file
           <//>`}>
           Add a JavaScript file for the app to run.
-        <//>`,Z;if(Y)b?b.kind==="missing"?Z=x`
+        <//>`,X;if(Z)b?b.kind==="missing"?X=x`
       <${z} what="File" action=${x`
         <${me} variant="primary"
           onClick=${()=>h(["code",e],{replace:!0})}>
           Back to ${e}
-        <//>`} />`:b.kind==="image"?Z=x`
+        <//>`} />`:b.kind==="image"?X=x`
       <div class="ac-preview">
         <img alt=${b.name}
           src=${`/user/${encodeURIComponent(e)}/${encodeURIComponent(b.name)}`} />
-      </div>`:b.kind==="binary"?Z=x`
+      </div>`:b.kind==="binary"?X=x`
       <${M} icon="fa-solid fa-file" title="Not a text file">
         ${b.name} can't be edited here.
-      <//>`:Z=x`
+      <//>`:X=x`
       <div class="ac-editor-host"><div class="ac-editor-mount" ref=${se}></div></div>
       <div class="ac-status">
         <span>${nt[He(b.name)]??"Text"}</span>
         <span role="status">${Ee?"Saving\u2026":re?"Unsaved changes":"Saved"}</span>
-      </div>`:Z=x`<div class="ac-empty" aria-busy="true"><p>Opening ${t}…</p></div>`;else{let f=u.find(E=>E.name===k?.entry);Z=x`
+      </div>`:X=x`<div class="ac-empty" aria-busy="true"><p>Opening ${t}…</p></div>`;else{let f=u.find(E=>E.name===k?.entry);X=x`
       <${M} icon="fa-solid fa-file-code" title="Pick a file"
         action=${f?x`<${me} variant="outline-primary" onClick=${()=>dt(f.name)}>
               Open ${f.name}
             <//>`:null}>
         Choose a file from the list to edit it.
-      <//>`}let $t=Y?x`${t}${re?x`<span class="ac-dirty" role="img" aria-label="unsaved changes"></span>`:null}`:e,mt=x`
+      <//>`}let $t=Z?x`${t}${re?x`<span class="ac-dirty" role="img" aria-label="unsaved changes"></span>`:null}`:e,mt=x`
     ${b?.kind==="text"?x`<${H} icon="fa-solid fa-floppy-disk" label="Save"
                disabled=${!re||Ee} onClick=${ye} />`:null}
     <${H} icon="fa-solid fa-play" label=${`Run ${e}`} primary onClick=${pa} />
-    <${ee} title=${Y?t:e} actions=${[{label:"New file",icon:"fa-solid fa-plus",onSelect:()=>T(!0)},{label:"Export project",icon:"fa-solid fa-file-export",onSelect:ha},Y&&{label:`Delete ${t}`,icon:"fa-solid fa-trash",danger:!0,onSelect:()=>ct(t)},{label:"Delete project",icon:"fa-solid fa-trash",danger:!0,onSelect:ya}]} />`,pt=x`
+    <${te} title=${Z?t:e} actions=${[{label:"New file",icon:"fa-solid fa-plus",onSelect:()=>T(!0)},{label:"Export project",icon:"fa-solid fa-file-export",onSelect:ha},Z&&{label:`Delete ${t}`,icon:"fa-solid fa-trash",danger:!0,onSelect:()=>ct(t)},{label:"Delete project",icon:"fa-solid fa-trash",danger:!0,onSelect:ya}]} />`,pt=x`
     <${fn} show=${S} project=${e} existing=${u}
       onClose=${()=>T(!1)} onCreate=${va} />
-    ${c}`;return!i&&!Y?x`
+    ${c}`;return!i&&!Z?x`
       <${D} title=${$t} subtitle=${k?.description||null} back=${["code"]}
         actions=${mt}
         fab=${{icon:"fa-solid fa-plus",label:"New file",onClick:()=>T(!0)}}>
@@ -449,8 +449,8 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
         ${ft}
       <//>
       ${pt}`:x`
-    <${D} title=${$t} subtitle=${Y?e:k?.description||null}
-      back=${Y?["code",e]:["code"]} actions=${mt} fill>
+    <${D} title=${$t} subtitle=${Z?e:k?.description||null}
+      back=${Z?["code",e]:["code"]} actions=${mt} fill>
       <div class="ac-split">
         ${i?x`
               <aside class="ac-sidebar" aria-label="Files">
@@ -463,7 +463,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
               </aside>`:null}
         <div class="ac-pane">
           ${ut}
-          ${Z}
+          ${X}
         </div>
       </div>
     <//>
@@ -509,7 +509,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
     ${l}`}import{html as p,useState as N,useEffect as Oe,useCallback as gn,useMemo as kn,Button as pe,Dropdown as ie,Table as aa,CheckBox as Sn,TableMaint as Cn}from"acelery/ui.js";import{openDB as xn,deleteDB as Dn}from"acelery/sql.js";var qe=(e,t,a=`${t}s`)=>`${e} ${e===1?t:a}`,En=["INT","DOU","REA","FLO","NUM","DEC","BOO","DAT"],Tn=`create table new_table (
   id integer primary key,
   name text not null
-)`,An=200;function na({dbName:e,parts:t,settings:a,updateSettings:n}){let[o,i]=N(null),[r,s]=N("loading"),[c,d]=N(null),[l,u]=N(""),[y,k]=N(null),[v,$]=N([]),m=O(),{confirm:S,dialog:T}=q();Oe(()=>{let A=!0,P=null;return(async()=>{try{if(!await Rt(e)){A&&s("missing");return}if(P=await xn(e),!A)return;i(P),s("ready"),a["recent.db"]!==e&&n({"recent.db":e})}catch(V){if(!A)return;d(V),s("ready")}})(),()=>{A=!1,P?.close().catch(()=>{})}},[e]);async function b(){if(await S(`${e} and every table in it will be deleted. This cannot be undone.`,{title:`Delete ${e}?`,danger:!0,confirmLabel:"Delete"}))try{await o?.close(),await Dn(e),a["recent.db"]===e&&n({"recent.db":""}),m(`Deleted ${e}`),h(["data"],{replace:!0})}catch(P){d(P)}}async function C(A){if(!await S(`The table ${A} and all of its rows will be deleted. This cannot be undone.`,{title:`Drop ${A}?`,danger:!0,confirmLabel:"Drop table"}))return!1;try{return await o.exec(`drop table ${Re(A)}`),m(`Dropped ${A}`),!0}catch(V){return d(V),!1}}let[re,he,Ee]=t,ve=p`<${j} error=${c} onClose=${()=>d(null)} />`;if(r==="missing")return p`
+)`,An=200;function na({dbName:e,parts:t,settings:a,updateSettings:n}){let[o,i]=N(null),[r,s]=N("loading"),[c,d]=N(null),[l,u]=N(""),[y,k]=N(null),[v,$]=N([]),m=O(),{confirm:S,dialog:T}=q();Oe(()=>{let A=!0,P=null;return(async()=>{try{if(!await Rt(e)){A&&s("missing");return}if(P=await xn(e),!A)return;i(P),s("ready"),a["recent.db"]!==e&&n({"recent.db":e})}catch(Y){if(!A)return;d(Y),s("ready")}})(),()=>{A=!1,P?.close().catch(()=>{})}},[e]);async function b(){if(await S(`${e} and every table in it will be deleted. This cannot be undone.`,{title:`Delete ${e}?`,danger:!0,confirmLabel:"Delete"}))try{await o?.close(),await Dn(e),a["recent.db"]===e&&n({"recent.db":""}),m(`Deleted ${e}`),h(["data"],{replace:!0})}catch(P){d(P)}}async function C(A){if(!await S(`The table ${A} and all of its rows will be deleted. This cannot be undone.`,{title:`Drop ${A}?`,danger:!0,confirmLabel:"Drop table"}))return!1;try{return await o.exec(`drop table ${Re(A)}`),m(`Dropped ${A}`),!0}catch(Y){return d(Y),!1}}let[re,he,Ee]=t,ve=p`<${j} error=${c} onClose=${()=>d(null)} />`;if(r==="missing")return p`
       <${D} title=${e} back=${["data"]}>
         <${z} what="Database" action=${p`
           <${pe} variant="primary" onClick=${()=>h(["data"],{replace:!0})}>
@@ -521,7 +521,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
         onDrop=${async()=>{await C(he)&&h(["data",e],{replace:!0})}} />
       ${T}`;let se=re==="sql"?"sql":"tables";return p`
     <${D} title=${e} back=${["data"]}
-      actions=${p`<${ee} title=${e} actions=${[{label:"Delete database",icon:"fa-solid fa-trash",danger:!0,onSelect:b}]} />`}
+      actions=${p`<${te} title=${e} actions=${[{label:"Delete database",icon:"fa-solid fa-trash",danger:!0,onSelect:b}]} />`}
       subbar=${p`
         <${Fe} label="Database view" value=${se}
           options=${[{value:"tables",label:"Tables",icon:"fa-solid fa-table"},{value:"sql",label:"SQL",icon:"fa-solid fa-terminal"}]}
@@ -544,7 +544,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
       <${M} icon="fa-solid fa-table" title="No tables yet"
         action=${p`<${pe} variant="primary" onClick=${o}>Create a table<//>`}>
         Start from a template in the SQL tab.
-      <//>`}function Pn({db:e,dbName:t,table:a,structure:n,error:o,onError:i,onDrop:r}){let[s,c]=N(null),[d,l]=N(()=>new Set);Oe(()=>{if(!e)return;let m=!0;return(async()=>{try{Re(a);let S=await e.select(`PRAGMA table_info(${a})`);m&&c(S)}catch(S){if(!m)return;i(S),c([])}})(),()=>{m=!1}},[e,a]);let u=kn(()=>(s??[]).map(m=>({type:En.some(S=>String(m.type).toUpperCase().includes(S))?"number":"string",title:m.name,name:m.name,inList:!d.has(m.name),inSearch:!0})),[s,d]),y=(m,S)=>l(T=>{let b=new Set(T);return S?b.delete(m):b.add(m),b}),k=p`<${ee} title=${a} actions=${[n?{label:"Browse rows",icon:"fa-solid fa-table",onSelect:()=>h(["data",t,"table",a],{replace:!0})}:{label:"Structure",icon:"fa-solid fa-table-columns",onSelect:()=>h(["data",t,"table",a,"structure"])},{label:"Drop table",icon:"fa-solid fa-trash",danger:!0,onSelect:r}]} />`,v=!n&&s?.length?p`
+      <//>`}function Pn({db:e,dbName:t,table:a,structure:n,error:o,onError:i,onDrop:r}){let[s,c]=N(null),[d,l]=N(()=>new Set);Oe(()=>{if(!e)return;let m=!0;return(async()=>{try{Re(a);let S=await e.select(`PRAGMA table_info(${a})`);m&&c(S)}catch(S){if(!m)return;i(S),c([])}})(),()=>{m=!1}},[e,a]);let u=kn(()=>(s??[]).map(m=>({type:En.some(S=>String(m.type).toUpperCase().includes(S))?"number":"string",title:m.name,name:m.name,inList:!d.has(m.name),inSearch:!0})),[s,d]),y=(m,S)=>l(T=>{let b=new Set(T);return S?b.delete(m):b.add(m),b}),k=p`<${te} title=${a} actions=${[n?{label:"Browse rows",icon:"fa-solid fa-table",onSelect:()=>h(["data",t,"table",a],{replace:!0})}:{label:"Structure",icon:"fa-solid fa-table-columns",onSelect:()=>h(["data",t,"table",a,"structure"])},{label:"Drop table",icon:"fa-solid fa-trash",danger:!0,onSelect:r}]} />`,v=!n&&s?.length?p`
         <${ie} autoClose="outside" align="end" className="ac-over">
           <${ie.Toggle} as="button" type="button" bsPrefix="ac-chip"
                               aria-label="Choose columns">
@@ -644,7 +644,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
           <${pe} variant="outline-secondary" onClick=${t}>
             Show all ${a.length}
           <//>
-        </div>`:null}`}import{html as _e,useState as Mn,THEMES as jn,applyTheme as oa,currentTheme as ia,currentMode as Bn,themeHasModes as Rn,isDark as ra}from"acelery/ui.js";import{EDITOR_THEMES as Hn,isDarkTheme as On}from"acelery/editor.js";var qn=e=>e.charAt(0).toUpperCase()+e.slice(1),sa=e=>e==="acelery"?"aCelery":qn(e),la="acelery.keepAwake";function _n(){try{return sessionStorage.getItem(la)==="1"}catch{return!1}}function Nn(e){try{sessionStorage.setItem(la,e?"1":"0")}catch{}}function ca({settings:e,updateSettings:t}){let[a,n]=Mn(_n),o=ia(),i=Rn(o),r=e.editortheme??"";function s(l){t({theme:oa(l)})}function c(l){oa(ia(),{mode:l}),t({"theme.mode":l})}function d(l){n(l),Nn(l),ae({action:"setKeepAwake",on:l})}return _e`
+        </div>`:null}`}import{html as _e,useState as Mn,THEMES as jn,applyTheme as oa,currentTheme as ia,currentMode as Bn,themeHasModes as Rn,isDark as ra}from"acelery/ui.js";import{EDITOR_THEMES as Hn,isDarkTheme as On}from"acelery/editor.js";var qn="/system/doc/aCelery-guide.pdf",_n=e=>e.charAt(0).toUpperCase()+e.slice(1),sa=e=>e==="acelery"?"aCelery":_n(e),la="acelery.keepAwake";function Nn(){try{return sessionStorage.getItem(la)==="1"}catch{return!1}}function Un(e){try{sessionStorage.setItem(la,e?"1":"0")}catch{}}function ca({settings:e,updateSettings:t}){let[a,n]=Mn(Nn),o=ia(),i=Rn(o),r=e.editortheme??"";function s(l){t({theme:oa(l)})}function c(l){oa(ia(),{mode:l}),t({"theme.mode":l})}function d(l){n(l),Un(l),ae({action:"setKeepAwake",on:l})}return _e`
     <${D} title="Settings">
       <section class="ac-section" aria-labelledby="settings-appearance">
         <h2 class="ac-section-title" id="settings-appearance">Appearance</h2>
@@ -686,7 +686,7 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
         </div>
       </section>
 
-      ${te()?_e`
+      ${W()?_e`
             <section class="ac-section" aria-labelledby="settings-device">
               <h2 class="ac-section-title" id="settings-device">This device</h2>
               <div class="ac-list">
@@ -726,6 +726,18 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
           </div>
           <div class="ac-row is-action">
             <div class="ac-row-icon" aria-hidden="true">
+              <${g} name="fa-solid fa-file-lines" />
+            </div>
+            <div class="ac-row-body">
+              <a class="ac-stretch ac-row-title" href=${qn}
+                 target="_blank" rel="noopener">User's guide</a>
+              <div class="ac-row-meta">
+                ${W()?"The PDF, opened with your reader":"The PDF, in a new tab"}
+              </div>
+            </div>
+          </div>
+          <div class="ac-row is-action">
+            <div class="ac-row-icon" aria-hidden="true">
               <${g} name="fa-solid fa-arrow-up-right-from-square" />
             </div>
             <div class="ac-row-body">
@@ -736,18 +748,18 @@ import{html as R,render as Un,useState as da,useEffect as ua,useCallback as Kn,B
           </div>
         </div>
       </section>
-    <//>`}var $a=Promise.resolve();function Jn(e){let t=$a.then(()=>Pt(e));return $a=t.catch(a=>console.error("aCelery: could not save settings",a)),t}function Wn(e){let t=String(e).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);return t?"#"+t.slice(1,4).map(a=>Number(a).toString(16).padStart(2,"0")).join(""):null}function rt(){te()&&requestAnimationFrame(()=>{let e=document.querySelector(".ac-appbar")??document.body,t=Wn(getComputedStyle(e).backgroundColor);ae({action:"setChrome",dark:ma(),...t?{color:t}:{}})})}function Qn(){let e=bt(),[t,a]=da(null),[,n]=da(0);ua(()=>{Lt().then(u=>{fa(u.theme||"acelery",{mode:u["theme.mode"]||"system"}),a(u)},u=>{console.error("aCelery: could not read settings",u),fa("acelery",{mode:"system"}),a({})})},[]),ua(()=>{let u=()=>{n(k=>k+1),rt()};document.addEventListener("acelery:themechange",u);let y=document.getElementById("xbtheme");return y?.addEventListener("load",rt),()=>{document.removeEventListener("acelery:themechange",u),y?.removeEventListener("load",rt)}},[]);let o=Kn(u=>{a(y=>({...y,...u})),Jn(u)},[]);if(!t)return R`
+    <//>`}var $a=Promise.resolve();function Wn(e){let t=$a.then(()=>Pt(e));return $a=t.catch(a=>console.error("aCelery: could not save settings",a)),t}function Qn(e){let t=String(e).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);return t?"#"+t.slice(1,4).map(a=>Number(a).toString(16).padStart(2,"0")).join(""):null}function rt(){W()&&requestAnimationFrame(()=>{let e=document.querySelector(".ac-appbar")??document.body,t=Qn(getComputedStyle(e).backgroundColor);ae({action:"setChrome",dark:ma(),...t?{color:t}:{}})})}function Vn(){let e=bt(),[t,a]=da(null),[,n]=da(0);ua(()=>{Lt().then(u=>{fa(u.theme||"acelery",{mode:u["theme.mode"]||"system"}),a(u)},u=>{console.error("aCelery: could not read settings",u),fa("acelery",{mode:"system"}),a({})})},[]),ua(()=>{let u=()=>{n(k=>k+1),rt()};document.addEventListener("acelery:themechange",u);let y=document.getElementById("xbtheme");return y?.addEventListener("load",rt),()=>{document.removeEventListener("acelery:themechange",u),y?.removeEventListener("load",rt)}},[]);let o=Gn(u=>{a(y=>({...y,...u})),Wn(u)},[]);if(!t)return R`
       <${We} section=${e.section}>
         <${D} title="aCelery"><${L} rows=${3} /><//>
-      <//>`;let i=t.editortheme,r=i&&zn.some(u=>u.value===i)?i:ma()?"dark":"light",{section:s,parts:c}=e,d={settings:t,updateSettings:o},l;switch(s){case"home":l=R`<${Ut} ...${d} />`;break;case"apps":l=R`<${Gt} ...${d} />`;break;case"code":l=c[0]?R`<${Xt} key=${c[0]} project=${c[0]} fileName=${c[1]}
+      <//>`;let i=t.editortheme,r=i&&Jn.some(u=>u.value===i)?i:ma()?"dark":"light",{section:s,parts:c}=e,d={settings:t,updateSettings:o},l;switch(s){case"home":l=R`<${Ut} ...${d} />`;break;case"apps":l=R`<${Gt} ...${d} />`;break;case"code":l=c[0]?R`<${Xt} key=${c[0]} project=${c[0]} fileName=${c[1]}
                  editorTheme=${r} ...${d} />`:R`<${Qt} ...${d} />`;break;case"data":l=c[0]?R`<${na} key=${c[0]} dbName=${c[0]}
                  parts=${c.slice(1)} ...${d} />`:R`<${ta} ...${d} />`;break;case"settings":l=R`<${ca} ...${d} />`;break;default:l=R`
         <${D} title="Not found">
           <${z} what="Page" action=${R`
-            <${Gn} variant="primary" onClick=${()=>h([],{replace:!0})}>
+            <${zn} variant="primary" onClick=${()=>h([],{replace:!0})}>
               Go home
             <//>`} />
         <//>`}return R`
     <${Dt}>
       <${We} section=${s}>${l}<//>
-    <//>`}function Vn(e=document.body){wt(),Un(R`<${Qn} />`,e)}export{Vn as default};
+    <//>`}function Yn(e=document.body){wt(),Kn(R`<${Vn} />`,e)}export{Yn as default};

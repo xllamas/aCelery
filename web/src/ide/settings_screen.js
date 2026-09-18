@@ -17,6 +17,15 @@ import { Screen } from "./frame.js";
 import { Icon, ListRow, Segmented } from "./parts.js";
 import { hasHost, hostPost } from "./store.js";
 
+/* Shipped in the bundle, so it opens with no network and nothing to fetch.
+   tool/build_guide.mjs builds it from doc/user-guide.md.
+
+   A WebView will not render a PDF, so inside the app this link never
+   navigates: decideNavigation hands it to the host, which passes the file to
+   whatever reads PDFs on the device (lib/src/shell/host_bridge.dart). In a
+   browser on the network the same href simply opens in a tab. */
+const GUIDE = "/system/doc/aCelery-guide.pdf";
+
 const titleCase = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const themeLabel = (t) => (t === "acelery" ? "aCelery" : titleCase(t));
 
@@ -150,6 +159,20 @@ export function SettingsScreen({ settings, updateSettings }) {
             <div class="ac-row-body">
               <div class="ac-row-title">Serving</div>
               <div class="ac-row-meta">${window.location.origin}</div>
+            </div>
+          </div>
+          <div class="ac-row is-action">
+            <div class="ac-row-icon" aria-hidden="true">
+              <${Icon} name="fa-solid fa-file-lines" />
+            </div>
+            <div class="ac-row-body">
+              <a class="ac-stretch ac-row-title" href=${GUIDE}
+                 target="_blank" rel="noopener">User's guide</a>
+              <div class="ac-row-meta">
+                ${hasHost()
+                  ? "The PDF, opened with your reader"
+                  : "The PDF, in a new tab"}
+              </div>
             </div>
           </div>
           <div class="ac-row is-action">

@@ -41,7 +41,11 @@ class HostActions {
     );
   }
 
-  /// Reads the pending export directly from the bridge that produced it.
+  /// What [url] names: a pending export, read straight from the bridge that
+  /// produced it, or a file the bundle ships.
+  ///
+  /// Null bytes mean nothing was found, and [download] then does nothing --
+  /// a stale handle, or a link to a file that is not there.
   Future<(String, List<int>?)> _resolve(Uri url) async {
     final q = url.queryParameters;
 
@@ -65,7 +69,19 @@ class HostActions {
       return ('$project.zip', bytes);
     }
 
-    return (url.pathSegments.lastOrNull ?? 'download', null);
+    // A static file the page linked to rather than an export it staged: the
+    // user's guide, and anything else the bundle ships that a WebView cannot
+    // render itself. Confined to the served tree, because `download` is
+    // reachable from any page and what it resolves goes to the share sheet.
+    final name = url.pathSegments.lastOrNull ?? 'download';
+    final root = Directory(runtime.paths.wwwRoot);
+    final file = File(
+        ACeleryPaths.normalize('${runtime.paths.wwwRoot}${url.path}'));
+    if (ACeleryPaths.isInside(root, file) && file.existsSync()) {
+      return (name, await file.readAsBytes());
+    }
+
+    return (name, null);
   }
 
   /// Opens a link outside aCelery, the way the Website menu item did.
