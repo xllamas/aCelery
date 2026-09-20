@@ -24,8 +24,23 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Apps you build in aCelery can take a photo when you ask them to, such as a picture for a record.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Apps you build in aCelery can reach devices on your local network, such as a printer or a home server.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Apps you build in aCelery can record a video with sound when you ask them to.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Apps you build in aCelery can use a photo you choose from your library.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -49,27 +64,6 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<!-- The product is served over plain HTTP from an embedded server on
-	     127.0.0.1, which is where xscript.js reaches its native bridge.
-	     NSAllowsLocalNetworking permits exactly that without relaxing App
-	     Transport Security for anything else. -->
-	<!-- Serving needs no permission: accepting incoming connections is exempt
-	     from local network privacy. Reaching out does not: an app calling a
-	     device on the Wi-Fi through acelery/http.js needs the user's consent,
-	     and from iOS 18 the prompt is only shown when this key is set. -->
-	<key>NSCameraUsageDescription</key>
-	<string>Apps you build in aCelery can take a photo when you ask them to, such as a picture for a record.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Apps you build in aCelery can record a video with sound when you ask them to.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Apps you build in aCelery can use a photo you choose from your library.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Apps you build in aCelery can reach devices on your local network, such as a printer or a home server.</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
