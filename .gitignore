@@ -52,5 +52,7 @@ app.*.map.json
 # without node still packs a working bundle.
 web/node_modules/
 
-# Play Store listing texts, kept locally and pasted into Play Console by hand.
+# Store listing and App Review texts, kept locally and pasted into Play Console
+# and App Store Connect by hand.
 /doc/play-store/
+/doc/app-store/
