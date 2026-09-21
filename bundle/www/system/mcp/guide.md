@@ -171,6 +171,10 @@ const one = await db.selectOne("select sum(ml) as total from drink");
 - `select` resolves to an array of row objects. Columns keep their SQLite
   types: an INTEGER is a number, and NULL is `null`.
 - `exec` resolves to the number of rows changed, and `insert` to the new rowid.
+- An `id integer primary key` column is fine, and it *is* the rowid. That means
+  `select rowid, *` reports the rowid under the name `id`, not `rowid`. Write
+  `select rowid as rowid, *` when your code reads `row.rowid`, or just read
+  `row.id`.
 - **Create tables from the app**, with `create if not exists` when it starts,
   so the app works on a phone where its database does not exist yet. Use
   `exec_db` to inspect and repair data, not to create the schema the app

@@ -296,8 +296,10 @@ export function TableMaint({
         else where.push("rowid >= ?");
         args.push(backwards ? to : from);
 
+        /* `as rowid` keeps the name: a table with an INTEGER PRIMARY KEY would
+           otherwise report the rowid under that column's name instead. */
         const sql =
-          `select rowid, * from ${name}` +
+          `select rowid as rowid, * from ${name}` +
           (where.length ? ` where ${where.join(" and ")}` : "") +
           ` order by rowid ${backwards ? "desc" : "asc"}` +
           (slave ? "" : ` limit ${Number(pageSize) | 0}`);
@@ -317,7 +319,7 @@ export function TableMaint({
     (id) =>
       guard(async () => {
         const found = await db.selectOne(
-          `select rowid, * from ${safeName(table)} where rowid = ?`,
+          `select rowid as rowid, * from ${safeName(table)} where rowid = ?`,
           [id],
         );
         if (!live.current) return;
@@ -646,7 +648,7 @@ export function useTableOptions(db, table, field) {
     (async () => {
       try {
         const rows = await db.select(
-          `select rowid, ${safeName(field)} from ${safeName(table)}` +
+          `select rowid as rowid, ${safeName(field)} from ${safeName(table)}` +
             ` order by ${safeName(field)}`,
         );
         if (live) {

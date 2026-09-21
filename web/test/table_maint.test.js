@@ -138,7 +138,7 @@ test("the list view selects with bound arguments, never concatenation", async ()
                                   fields=${FIELDS} />`);
 
   const select = db.last("select");
-  assert.match(select.sql, /select rowid, \* from person/);
+  assert.match(select.sql, /select rowid as rowid, \* from person/);
   assert.match(select.sql, /rowid >= \?/);
   assert.deepEqual(select.args, [0]);
   // The whole point of §3.3: no value is ever spliced into the statement.
@@ -179,7 +179,7 @@ test("opening a record fetches it by bound rowid", async () => {
   await click(host, "1");
 
   const one = db.last("selectOne");
-  assert.match(one.sql, /where rowid = \?/);
+  assert.match(one.sql, /select rowid as rowid, \* from person where rowid = \?/);
   assert.deepEqual(one.args, [1]);
   assert.match(host.textContent, /Directory - Record/);
   // Edit / Delete / Ok, as xbTableMaint.show offered.
