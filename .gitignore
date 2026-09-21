@@ -51,3 +51,6 @@ app.*.map.json
 # under bundle/www/tools/js/acelery is committed on purpose, so a checkout
 # without node still packs a working bundle.
 web/node_modules/
+
+# Play Store listing texts, kept locally and pasted into Play Console by hand.
+/doc/play-store/
