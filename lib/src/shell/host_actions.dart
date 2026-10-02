@@ -108,39 +108,77 @@ class HostActions {
     final path = picked?.path;
     if (path == null) return null;
 
-    final bytes = await File(path).readAsBytes();
-
-    // A whole-data backup (aCelery/db, aCelery/files, aCelery/www/user) rather
-    // than one project: put every file back where it came from.
-    if (_isDataBackup(bytes)) {
-      await extractArchive(
-        bytes,
-        Directory(runtime.paths.root),
-        allow: _restorable,
-      );
-      return 'data backup';
-    }
-
     final name = _projectNameFor(path);
     final target = Directory(runtime.paths.userProjectDir(name));
     await target.create(recursive: true);
 
-    await extractArchive(bytes, target);
+    await extractArchive(await File(path).readAsBytes(), target);
     return name;
   }
 
-  static const _restoreRoots = [
-    'aCelery/db/',
-    'aCelery/files/',
-    'aCelery/www/user/',
-  ];
+  static const _backupRoots = ['db', 'files', 'www/user'];
 
   static bool _restorable(String entryName) =>
-      _restoreRoots.any(entryName.startsWith);
+      _backupRoots.any((root) => entryName.startsWith('aCelery/$root/'));
 
-  static bool _isDataBackup(List<int> bytes) => ZipDecoder()
-      .decodeBytes(Uint8List.fromList(bytes))
-      .any((e) => e.name.startsWith('aCelery/db/'));
+  /// Settings → Back up data: zips the databases, their files and the user's
+  /// apps into one archive and hands it to the share sheet.
+  ///
+  /// Returns false when there was nothing to back up.
+  Future<bool> backupData() async {
+    final base = Directory(runtime.paths.base);
+    final archive = Archive();
+    for (final root in _backupRoots) {
+      final dir = Directory('${base.path}/$root');
+      if (!dir.existsSync()) continue;
+      await for (final entity in dir.list(recursive: true)) {
+        if (entity is! File || entity.path.endsWith('-journal')) continue;
+        final name = 'aCelery/${entity.path.substring(base.path.length + 1)}';
+        final bytes = await entity.readAsBytes();
+        archive.addFile(ArchiveFile(name, bytes.length, bytes));
+      }
+    }
+    if (archive.isEmpty) return false;
+
+    final stamp = DateTime.now().toIso8601String().substring(0, 10);
+    final name = 'aCelery_backup_$stamp.zip';
+    final file = File('${runtime.paths.cacheRoot}$name');
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(ZipEncoder().encode(archive));
+
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], fileNameOverrides: [name]),
+    );
+    return true;
+  }
+
+  /// Settings → Restore data: puts a [backupData] archive back, overwriting
+  /// what is there. Only `db/`, `files/` and `www/user/` are touched.
+  ///
+  /// Returns false if the user cancelled; throws if the file is not a backup.
+  Future<bool> restoreData() async {
+    final picked = await FilePicker.pickFile(
+      dialogTitle: 'Restore aCelery data',
+      type: FileType.custom,
+      allowedExtensions: const ['zip'],
+    );
+    final path = picked?.path;
+    if (path == null) return false;
+
+    final bytes = await File(path).readAsBytes();
+    final isBackup = ZipDecoder()
+        .decodeBytes(bytes)
+        .any((e) => e.name.startsWith('aCelery/db/'));
+    if (!isBackup) {
+      throw const FormatException('That file is not an aCelery data backup');
+    }
+    await extractArchive(
+      bytes,
+      Directory(runtime.paths.root),
+      allow: _restorable,
+    );
+    return true;
+  }
 
   String _projectNameFor(String archivePath) {
     final base = archivePath.split(Platform.pathSeparator).last;

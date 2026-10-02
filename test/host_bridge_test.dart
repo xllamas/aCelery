@@ -37,6 +37,11 @@ void main() {
       expect(HostMessage.parse('{"action":"showNetworkAccess"}'),
           isA<ShowNetworkAccessMessage>());
 
+      expect(HostMessage.parse('{"action":"backupData"}'),
+          isA<BackupDataMessage>());
+      expect(HostMessage.parse('{"action":"restoreData"}'),
+          isA<RestoreDataMessage>());
+
       final awake = HostMessage.parse('{"action":"setKeepAwake","on":true}')
           as SetKeepAwakeMessage;
       expect(awake.on, isTrue);

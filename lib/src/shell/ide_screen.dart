@@ -110,6 +110,10 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
         await showBusy(context, _actions.download(Uri.parse(message.url)));
       case ImportProjectMessage():
         await _importProject();
+      case BackupDataMessage():
+        await _backupData();
+      case RestoreDataMessage():
+        await _restoreData();
       case OpenExternalMessage():
         await showBusy(context, _actions.openExternal(Uri.parse(message.url)));
       case ShowNetworkAccessMessage():
@@ -207,6 +211,47 @@ class _IdeScreenState extends State<IdeScreen> with WidgetsBindingObserver {
       await _webView?.controller.reload();
     } on Exception catch (error) {
       messenger.showSnackBar(SnackBar(content: Text('Import failed: $error')));
+    }
+  }
+
+  Future<void> _backupData() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      if (!await _actions.backupData()) {
+        messenger.showSnackBar(
+            const SnackBar(content: Text('Nothing to back up yet')));
+      }
+    } on Exception catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text('Backup failed: $error')));
+    }
+  }
+
+  Future<void> _restoreData() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restore data?'),
+        content: const Text('Databases, files and apps in the backup replace '
+            'the ones on this device that have the same name.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Choose backup')),
+        ],
+      ),
+    );
+    if (go != true) return;
+    try {
+      final done = await _actions.restoreData();
+      if (!mounted || !done) return;
+      messenger.showSnackBar(const SnackBar(content: Text('Data restored')));
+      await _webView?.controller.reload();
+    } on Exception catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text('Restore failed: $error')));
     }
   }
 

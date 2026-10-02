@@ -184,6 +184,8 @@ class _UserAppScreenState extends State<UserAppScreen> {
       // The system shell's Settings messages. A user app has no business
       // opening the network sheet or holding a wakelock, so they do nothing
       // here even though the channel will carry them.
+      case BackupDataMessage():
+      case RestoreDataMessage():
       case ShowNetworkAccessMessage():
       case AddShortcutMessage():
       case SetKeepAwakeMessage():

@@ -91,7 +91,7 @@ tablet or a desktop browser they are a rail down the left.
 | **Apps** | Everything you can run |
 | **Code** | Projects, files and the editor |
 | **Data** | Databases, tables and SQL |
-| **Settings** | Theme, network access, about |
+| **Settings** | Theme, network access, backup and restore, about |
 
 Every screen has an address. `#/code/Example/main.js` is the editor open on
 that file, `#/data/notes.db/table/note` is that table. The device's Back button
@@ -236,6 +236,12 @@ Changes apply as you make them; there is nothing to save.
 *(Not shown in a browser on the network — these are the device's own settings.)*
 
 - **Network access** — opens the sharing sheet. See the next section.
+- **Back up data** — saves your databases, the files your apps wrote and your
+  apps themselves as one zip, `aCelery_backup_<date>.zip`, and opens the share
+  sheet so you can put it in Files, Drive, an email or anywhere else. See
+  [Backing up and restoring](#backing-up-and-restoring).
+- **Restore data** — puts such a zip back. It asks first, then lets you pick the
+  file.
 - **Keep screen on** — stops the device sleeping while aCelery is open. Useful
   while you are reading code on screen, and necessary on iPhone and iPad if you
   want the server to stay reachable.
@@ -349,11 +355,29 @@ aCelery/
   cache/             scratch space (exported zips)
 ```
 
-Uninstalling aCelery deletes all of it. **Export** your projects if they matter;
-that is the backup.
+Uninstalling aCelery deletes all of it. Back it up first (see below) if it
+matters.
 
 An app update never overwrites those four directories, so your projects,
 databases and files survive it.
+
+### Backing up and restoring
+
+**Settings → Back up data** zips `db/`, `files/` and `www/user/` — everything
+you made — into one `aCelery_backup_<date>.zip` and offers it to the share
+sheet. Logs and scratch files are left out. Keep the zip somewhere other than the
+device, especially before uninstalling aCelery or moving to a new phone.
+
+**Settings → Restore data** reads one back. Pick the zip and aCelery copies its
+databases, files and apps into place, then reloads. Anything in the backup
+replaces the item on the device with the same name; things the backup does not
+mention are left alone. A zip that is not an aCelery backup is refused.
+
+These two are for *everything at once*. To move a single app between devices,
+use **Export project** and **Import project** in Code instead.
+
+Back up while no app is busy writing to a database: the copy is a snapshot of the
+files as they are at that moment.
 
 ---
 

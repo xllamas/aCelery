@@ -20,6 +20,8 @@ sealed class HostMessage {
       'closeApp' => const CloseAppMessage(),
       'download' => DownloadMessage(url: json['url'] as String? ?? ''),
       'importProject' => const ImportProjectMessage(),
+      'backupData' => const BackupDataMessage(),
+      'restoreData' => const RestoreDataMessage(),
       'showNetworkAccess' => const ShowNetworkAccessMessage(),
       'addShortcut' => AddShortcutMessage(app: json['app'] as String? ?? ''),
       'console' => ConsoleMessage(
@@ -63,6 +65,16 @@ int? parseHexColor(Object? value) {
   final match = RegExp(r'^#([0-9a-fA-F]{6})$').firstMatch(value);
   if (match == null) return null;
   return 0xFF000000 | int.parse(match.group(1)!, radix: 16);
+}
+
+/// Settings → Back up data: zip the databases, files and apps and share it.
+class BackupDataMessage extends HostMessage {
+  const BackupDataMessage();
+}
+
+/// Settings → Restore data: put such a zip back.
+class RestoreDataMessage extends HostMessage {
+  const RestoreDataMessage();
 }
 
 /// Settings → Network access: open the sheet that decides which devices on

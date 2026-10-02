@@ -491,6 +491,11 @@ test("Settings shows device rows only when there is a host to act on them", asyn
     (await waitFor(() => byText("Network access"), "the Network access row")).click();
     assert.ok(posted.some((m) => m.action === "showNetworkAccess"));
 
+    (await waitFor(() => byText("Back up data"), "the Back up data row")).click();
+    assert.ok(posted.some((m) => m.action === "backupData"));
+    (await waitFor(() => byText("Restore data"), "the Restore data row")).click();
+    assert.ok(posted.some((m) => m.action === "restoreData"));
+
     document.querySelector("#settings-awake").click();
     assert.ok(posted.some((m) => m.action === "setKeepAwake" && m.on === true));
   } finally {

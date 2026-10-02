@@ -129,6 +129,12 @@ export function SettingsScreen({ settings, updateSettings }) {
                 <${ListRow} icon="fa-solid fa-wifi" title="Network access"
                   meta="Let other devices on your network open aCelery"
                   onOpen=${() => hostPost({ action: "showNetworkAccess" })} />
+                <${ListRow} icon="fa-solid fa-box-archive" title="Back up data"
+                  meta="Save your databases, files and apps as one zip"
+                  onOpen=${() => hostPost({ action: "backupData" })} />
+                <${ListRow} icon="fa-solid fa-clock-rotate-left" title="Restore data"
+                  meta="Put a backup zip back on this device"
+                  onOpen=${() => hostPost({ action: "restoreData" })} />
                 <div class="ac-setting">
                   <div class="ac-setting-label">
                     <label for="settings-awake">Keep screen on</label>
