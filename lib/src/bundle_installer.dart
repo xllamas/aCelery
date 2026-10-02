@@ -15,11 +15,13 @@ Future<void> extractArchive(
   Uint8List bytes,
   Directory into, {
   bool Function(File target)? skip,
+  bool Function(String entryName)? allow,
 }) async {
   final archive = ZipDecoder().decodeBytes(bytes);
   await into.create(recursive: true);
 
   for (final entry in archive) {
+    if (allow != null && !allow(entry.name)) continue;
     final target = File(ACeleryPaths.normalize('${into.path}/${entry.name}'));
 
     if (!ACeleryPaths.isInside(into, target)) {

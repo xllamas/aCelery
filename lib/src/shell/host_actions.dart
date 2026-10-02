@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -32,7 +33,9 @@ class HostActions {
     final (name, bytes) = await _resolve(url);
     if (bytes == null) return;
 
-    final file = File(ACeleryPaths.normalize('${runtime.paths.cacheRoot}$name'));
+    final file = File(
+      ACeleryPaths.normalize('${runtime.paths.cacheRoot}$name'),
+    );
     await file.parent.create(recursive: true);
     await file.writeAsBytes(bytes);
 
@@ -76,7 +79,8 @@ class HostActions {
     final name = url.pathSegments.lastOrNull ?? 'download';
     final root = Directory(runtime.paths.wwwRoot);
     final file = File(
-        ACeleryPaths.normalize('${runtime.paths.wwwRoot}${url.path}'));
+      ACeleryPaths.normalize('${runtime.paths.wwwRoot}${url.path}'),
+    );
     if (ACeleryPaths.isInside(root, file) && file.existsSync()) {
       return (name, await file.readAsBytes());
     }
@@ -104,13 +108,39 @@ class HostActions {
     final path = picked?.path;
     if (path == null) return null;
 
+    final bytes = await File(path).readAsBytes();
+
+    // A whole-data backup (aCelery/db, aCelery/files, aCelery/www/user) rather
+    // than one project: put every file back where it came from.
+    if (_isDataBackup(bytes)) {
+      await extractArchive(
+        bytes,
+        Directory(runtime.paths.root),
+        allow: _restorable,
+      );
+      return 'data backup';
+    }
+
     final name = _projectNameFor(path);
     final target = Directory(runtime.paths.userProjectDir(name));
     await target.create(recursive: true);
 
-    await extractArchive(await File(path).readAsBytes(), target);
+    await extractArchive(bytes, target);
     return name;
   }
+
+  static const _restoreRoots = [
+    'aCelery/db/',
+    'aCelery/files/',
+    'aCelery/www/user/',
+  ];
+
+  static bool _restorable(String entryName) =>
+      _restoreRoots.any(entryName.startsWith);
+
+  static bool _isDataBackup(List<int> bytes) => ZipDecoder()
+      .decodeBytes(Uint8List.fromList(bytes))
+      .any((e) => e.name.startsWith('aCelery/db/'));
 
   String _projectNameFor(String archivePath) {
     final base = archivePath.split(Platform.pathSeparator).last;
