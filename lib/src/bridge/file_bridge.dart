@@ -98,6 +98,41 @@ class FileBridge {
     }
   }
 
+  /// Renames the file or folder at [path] to [newName], in the same folder.
+  ///
+  /// [newName] is a bare name: one with a separator would be a move, and a
+  /// project rename must not become one. Refuses when the target exists, so a
+  /// rename can never replace another project.
+  bool rename(String path, String? basePath, String newName) {
+    if (newName.isEmpty ||
+        newName == '.' ||
+        newName == '..' ||
+        newName.contains('/') ||
+        newName.contains(r'\')) {
+      return false;
+    }
+    final resolved =
+        _resolve(path, basePath).replaceAll(RegExp(r'/+$'), '');
+    if (resolved.isEmpty || !_permitted(resolved)) return false;
+    final source = FileSystemEntity.typeSync(resolved);
+    if (source == FileSystemEntityType.notFound) return false;
+    final target = ACeleryPaths.join(File(resolved).parent.path, newName);
+    if (!_permitted(target)) return false;
+    if (FileSystemEntity.typeSync(target) != FileSystemEntityType.notFound) {
+      return false;
+    }
+    try {
+      if (source == FileSystemEntityType.directory) {
+        Directory(resolved).renameSync(target);
+      } else {
+        File(resolved).renameSync(target);
+      }
+      return true;
+    } on FileSystemException {
+      return false;
+    }
+  }
+
   void close(int handle) => _files.remove(handle);
 
   /// Deletes the handle's target. Directories are removed with their immediate

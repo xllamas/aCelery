@@ -1391,3 +1391,9 @@ body {
     transition: none !important;
   }
 }
+
+.ac-icon-preview .ac-tile {
+  width: 72px;
+  height: 72px;
+  font-size: 2rem;
+}

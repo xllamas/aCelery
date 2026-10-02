@@ -56,6 +56,9 @@ async function listFiles(path, basePath) {
 async function mkdir(path, basePath) {
   await get({ opt: "file", action: "mkdir", path, bpath: basePath });
 }
+async function rename(path, newName, basePath) {
+  await get({ opt: "file", action: "rename", path, to: newName, bpath: basePath });
+}
 async function externalStoragePath() {
   const { extpath } = await get({ opt: "file", action: "getextpath" });
   return extpath;
@@ -76,6 +79,7 @@ export {
   listFiles,
   mkdir,
   open,
+  rename,
   url,
   writeBytes
 };

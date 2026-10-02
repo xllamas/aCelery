@@ -255,6 +255,13 @@ class ItfHandler {
         if (!files.mkdir(path, q['bpath'])) return _serverError;
         return _json(const {});
 
+      case 'rename':
+        final path = q['path'];
+        final to = q['to'];
+        if (path == null || to == null) return _badRequest;
+        if (!files.rename(path, q['bpath'], to)) return _serverError;
+        return _json(const {});
+
       case 'closefile':
         final handle = _int(q['handle']);
         if (handle == null) return _badRequest;

@@ -12,7 +12,7 @@
 
 import {
   html, useState, useEffect, useRef, useCallback,
-  Button, Modal, Form, Input, Select, notEmpty,
+  Button, Modal, Form, Input, Select, FileButton, notEmpty,
 } from "acelery/ui.js";
 import { runApp, exportProject } from "acelery/export.js";
 
@@ -25,8 +25,9 @@ import {
 import { navigate, setGuard } from "./router.js";
 import {
   deleteProject, deleteProjectFile, formatSize, listProjectFiles, projectExists,
-  readManifest, readProjectFile, writeProjectFile,
+  readManifest, readProjectFile, writeProjectBytes, writeProjectFile,
 } from "./store.js";
+import { AppDetailsSheet } from "./app_details.js";
 import { confirmDeleteProject } from "./apps_screen.js";
 
 const extension = (name) =>
@@ -97,6 +98,32 @@ function NewFileSheet({ show, project, existing, onClose, onCreate }) {
     <//>`;
 }
 
+/** The Add files dialog: the picker's button has to be tapped itself (FileButton). */
+function AddFilesSheet({ show, project, onClose, onPicked }) {
+  return html`
+    <${Sheet} show=${show} onHide=${onClose} title=${`Add files to ${project}`}>
+      <${Modal.Body}>
+        <p>
+          Copy pictures, data files or scripts from this device into the app.
+          Spaces in a name become underscores. A file with the same name is
+          replaced.
+        </p>
+        <${FileButton} variant="primary" multiple
+          onFiles=${(files) => { onClose(); onPicked(files); }}>
+          Choose files
+        <//>
+      <//>
+      <${Modal.Footer}>
+        <${Button} variant="outline-secondary" type="button" onClick=${onClose}>
+          Cancel
+        <//>
+      <//>
+    <//>`;
+}
+
+/** A name the project folder and its URLs can carry. */
+const storedName = (name) => name.replace(/[^\w.-]+/g, "_").replace(/^\.+/, "") || "file";
+
 export function CodeWorkspace({ project, fileName, editorTheme, settings, updateSettings }) {
   const split = useMedia(SPLIT);
   const toast = useToast();
@@ -107,6 +134,8 @@ export function CodeWorkspace({ project, fileName, editorTheme, settings, update
   const [manifest, setManifest] = useState(null);
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   /* The open document: {name, kind, text}, or kind "missing". */
   const [doc, setDoc] = useState(null);
@@ -312,6 +341,57 @@ export function CodeWorkspace({ project, fileName, editorTheme, settings, update
     }
   }
 
+  async function addFiles(picked) {
+    try {
+      let added = 0;
+      for (const item of picked) {
+        const name = storedName(item.name);
+        if (name === "acelery_app.json") {
+          throw new Error("acelery_app.json is the manifest; use App details to change it");
+        }
+        if (files.some((f) => f.name === name)) {
+          const yes = await confirm(`${name} already exists in ${project}. Replace it?`,
+            { title: "Replace file?", confirmLabel: "Replace" });
+          if (!yes) continue;
+          // An open copy would otherwise be saved back over the new one.
+          if (name === fileName) setDirty(false);
+        }
+        await writeProjectBytes(project, name, item);
+        added++;
+      }
+      await reloadFiles();
+      if (added) toast(added === 1 ? "Added 1 file" : `Added ${added} files`);
+      // The open file may just have been replaced: reopen it from disk.
+      if (fileName && added) navigate(["code", project, fileName], { replace: true });
+    } catch (e) {
+      setError(e);
+      await reloadFiles().catch(() => {});
+    }
+  }
+
+  /** The buffer is saved first: renaming the folder moves the file it belongs to. */
+  async function openDetails() {
+    if (dirtyRef.current && !(await save())) return;
+    setEditing(true);
+  }
+
+  async function detailsSaved({ name, renamed }) {
+    setEditing(false);
+    toast("App details saved");
+    if (settings["recent.project"] === project && renamed) {
+      updateSettings({ "recent.project": name });
+    }
+    if (renamed) {
+      navigate(fileName ? ["code", name, fileName] : ["code", name], { replace: true });
+      return;
+    }
+    try {
+      setManifest(await readManifest(project));
+    } catch (e) {
+      setError(e);
+    }
+  }
+
   async function removeFile(name) {
     const yes = await confirm(
       `${name} will be deleted from ${project}. This cannot be undone.`,
@@ -447,6 +527,8 @@ export function CodeWorkspace({ project, fileName, editorTheme, settings, update
     <${IconButton} icon="fa-solid fa-play" label=${`Run ${project}`} primary onClick=${run} />
     <${ActionMenu} title=${fileOpen ? fileName : project} actions=${[
       { label: "New file", icon: "fa-solid fa-plus", onSelect: () => setCreating(true) },
+      { label: "Add files…", icon: "fa-solid fa-file-import", onSelect: () => setAdding(true) },
+      { label: "App details", icon: "fa-solid fa-pen", onSelect: openDetails },
       { label: "Export project", icon: "fa-solid fa-file-export", onSelect: exportIt },
       fileOpen && { label: `Delete ${fileName}`, icon: "fa-solid fa-trash", danger: true,
                     onSelect: () => removeFile(fileName) },
@@ -457,6 +539,10 @@ export function CodeWorkspace({ project, fileName, editorTheme, settings, update
   const sheets = html`
     <${NewFileSheet} show=${creating} project=${project} existing=${files}
       onClose=${() => setCreating(false)} onCreate=${createFile} />
+    <${AddFilesSheet} show=${adding} project=${project}
+      onClose=${() => setAdding(false)} onPicked=${addFiles} />
+    <${AppDetailsSheet} show=${editing} project=${project} manifest=${manifest}
+      onClose=${() => setEditing(false)} onSaved=${detailsSaved} onError=${setError} />
     ${confirmDialog}`;
 
   /* The phone file list scrolls with a FAB. Everything else — the editor on a

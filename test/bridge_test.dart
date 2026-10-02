@@ -527,6 +527,28 @@ void main() {
       expect(Directory('${paths.filesRoot}sub').existsSync(), isTrue);
     });
 
+    test('rename moves a folder to a new name beside it', () async {
+      Directory('${paths.filesRoot}old').createSync(recursive: true);
+      File('${paths.filesRoot}old/a.txt').writeAsStringSync('x');
+      await get('opt=file&action=rename&path=old&to=fresh');
+      expect(Directory('${paths.filesRoot}old').existsSync(), isFalse);
+      expect(File('${paths.filesRoot}fresh/a.txt').readAsStringSync(), 'x');
+    });
+
+    test('rename refuses an existing target, a path, and traversal', () async {
+      Directory('${paths.filesRoot}one').createSync(recursive: true);
+      Directory('${paths.filesRoot}two').createSync(recursive: true);
+      for (final to in ['two', 'a/b', '..', r'a\\b', '']) {
+        final r = await raw(
+            'opt=file&action=rename&path=one&to=${Uri.encodeComponent(to)}');
+        expect(r.statusCode, isNot(200), reason: 'to=$to');
+      }
+      final r = await raw(
+          'opt=file&action=rename&path=${Uri.encodeComponent('../../x')}&to=y');
+      expect(r.statusCode, isNot(200));
+      expect(Directory('${paths.filesRoot}one').existsSync(), isTrue);
+    });
+
     test('getextpath returns what launcher.html concatenates onto', () async {
       expect((await get('opt=file&action=getextpath'))['extpath'], paths.root);
     });

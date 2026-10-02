@@ -994,11 +994,13 @@ void main() {
     test('the system shell stays within the budget its redesign set', () {
       // doc/shell-redesign.md §6.6: five destinations and a frame, no new
       // dependency, under 18 KB gzipped. A big jump here means something was
-      // bundled into ide.js that should have stayed external.
+      // bundled into ide.js that should have stayed external. 20 KB since App
+      // details and Add files, which brought the icon cropper's glue and a
+      // second sheet to the Code screen.
       final shell = File('${acelery.path}/ide.js');
       final gzipped = gzip.encode(shell.readAsBytesSync()).length;
-      expect(gzipped, lessThan(18 * 1024),
-          reason: '$gzipped bytes gzipped — §6.6 budgets 18 KB');
+      expect(gzipped, lessThan(20 * 1024),
+          reason: '$gzipped bytes gzipped — §6.6 budgeted 18 KB, now 20');
     });
 
     test('the chart bundle stays within the budget §3.8 measured', () {

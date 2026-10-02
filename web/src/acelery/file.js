@@ -86,6 +86,14 @@ export async function mkdir(path, basePath) {
   await get({ opt: "file", action: "mkdir", path, bpath: basePath });
 }
 
+/**
+ * Renames a file or folder in place. `newName` is a bare name, not a path, and
+ * the host refuses one that already exists.
+ */
+export async function rename(path, newName, basePath) {
+  await get({ opt: "file", action: "rename", path, to: newName, bpath: basePath });
+}
+
 /** The root the host will accept as a `basePath`. */
 export async function externalStoragePath() {
   const { extpath } = await get({ opt: "file", action: "getextpath" });

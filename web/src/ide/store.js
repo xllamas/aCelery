@@ -79,10 +79,15 @@ export async function dataBase() {
  * A manifest `icon` is a path inside the project. Anything that could climb out
  * of it, or name another origin, is ignored and the monogram is drawn instead.
  */
-function safeIcon(project, icon) {
+function safeIconPath(icon) {
   if (typeof icon !== "string" || !/^[\w.-]+(\/[\w.-]+)*$/.test(icon)) return null;
   if (icon.split("/").includes("..")) return null;
-  return `/user/${encodeURIComponent(project)}/${icon}`;
+  return icon;
+}
+
+function safeIcon(project, icon) {
+  const path = safeIconPath(icon);
+  return path && `/user/${encodeURIComponent(project)}/${path}`;
 }
 
 export async function readManifest(name, base) {
@@ -96,11 +101,36 @@ export async function readManifest(name, base) {
       description: typeof json.description === "string" ? json.description : "",
       entry: typeof json.entry === "string" && json.entry ? json.entry : "main.js",
       icon: safeIcon(name, json.icon),
+      iconFile: safeIconPath(json.icon),
     };
   } catch {
     // A project without a readable manifest is still a project.
-    return { description: "", entry: "main.js", icon: null };
+    return { description: "", entry: "main.js", icon: null, iconFile: null };
   }
+}
+
+/**
+ * Merges `patch` into the manifest and writes it back, keeping any key the IDE
+ * does not know about. A key set to null is removed. An unreadable manifest is
+ * started afresh rather than blocking the edit.
+ */
+export async function updateManifest(project, patch) {
+  const base = await userBase();
+  let json = {};
+  try {
+    const handle = await file.open("acelery_app.json", base + project);
+    const text = await handle.read();
+    await handle.close();
+    const parsed = text ? JSON.parse(text) : {};
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) json = parsed;
+  } catch {
+    // Started afresh.
+  }
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) delete json[key];
+    else json[key] = value;
+  }
+  await writeProjectFile(project, "acelery_app.json", JSON.stringify(json, null, 2));
 }
 
 /** Every project folder, with what its manifest says about it. */
@@ -148,6 +178,11 @@ export async function writeProjectFile(project, name, text) {
   }
 }
 
+/** Writes a picture or any other binary the user picked into a project. */
+export async function writeProjectBytes(project, name, data) {
+  return file.writeBytes(`${project}/${name}`, data, await userBase());
+}
+
 export async function deleteProjectFile(project, name) {
   const handle = await file.open(name, (await userBase()) + project);
   await handle.delete();
@@ -156,6 +191,11 @@ export async function deleteProjectFile(project, name) {
 export async function deleteProject(name) {
   const handle = await file.open(name, await userBase());
   await handle.delete();
+}
+
+/** Renames the project's folder. The host refuses a name already in use. */
+export async function renameProject(name, newName) {
+  await file.rename(name, newName, await userBase());
 }
 
 /**

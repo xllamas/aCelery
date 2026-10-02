@@ -151,6 +151,16 @@ browser on the network has no access to the device's file picker.*
 A project is its list of files. Tapping one opens it in the editor.
 
 - **New file** creates a `.js` or a `.css` in the project.
+- **Add files…** copies files from the device — pictures, data, scripts — into
+  the project. Spaces in a name become underscores, and a file with the same
+  name is replaced after you confirm. `acelery_app.json` cannot be replaced
+  this way; use App details.
+- **App details** edits the app's icon, name and description in one sheet.
+  **Choose icon** picks a picture and crops it square; it is saved as
+  `icon.png` and named in the manifest. The name is the project's folder, so
+  changing it renames the folder (a home screen shortcut to the old name stops
+  working). The description is written to the manifest, which keeps its other
+  keys.
 - **Run** launches the app. From Code this is a *debug* run, which adds the
   Error log to the running app's menu.
 - The project menu also has **Export project**, **Delete** *(this file)* and
@@ -453,7 +463,7 @@ www/user/<App>/
 
 | Key | Meaning |
 |---|---|
-| `name` | Shown on the card. Letters, digits and underscore, 16 at most |
+| `name` | The app's name, kept in step with its folder by App details. Letters, digits and underscore, 16 at most |
 | `description` | One line, shown under the name |
 | `entry` | The module to run. `main.js` if absent |
 | `icon` | A picture inside the project folder. Without one, a monogram is drawn |

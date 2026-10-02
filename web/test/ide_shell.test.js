@@ -175,6 +175,25 @@ function makeHost({
         }
         case "fileread": text = files.get(handles.get(Number(params.handle))) ?? ""; break;
         case "filewrite": files.set(handles.get(Number(params.handle)), body ?? ""); break;
+        case "rename": {
+          // A folder moves with everything under it; the host refuses a taken name.
+          const from = join(params.bpath, params.path);
+          const to = `${parentOf(from)}/${params.to}`;
+          if (dirs.has(to)) throw new Error("exists");
+          for (const d of [...dirs]) {
+            if (d === from || d.startsWith(`${from}/`)) {
+              dirs.delete(d);
+              dirs.add(to + d.slice(from.length));
+            }
+          }
+          for (const [f, t] of [...files]) {
+            if (f.startsWith(`${from}/`)) {
+              files.delete(f);
+              files.set(to + f.slice(from.length), t);
+            }
+          }
+          break;
+        }
         case "deletefile": {
           const path = handles.get(Number(params.handle));
           files.delete(path);
@@ -378,6 +397,42 @@ test("a deep link's back arrow goes up without leaving a dead entry", async () =
   byLabel("Back").click();
   await waitFor(() => window.location.hash === "#/code/Example", "the parent route");
   assert.equal(window.history.length, before, "replaced, not pushed");
+});
+
+test("App details edits the description and renames the folder, keeping other manifest keys", async () => {
+  const host = await open("#/code/Example");
+  const base = `${STORAGE}/aCelery/www/user`;
+  await waitFor(() => byLabel("More actions"), "the project menu");
+  byLabel("More actions").click();
+  (await waitFor(() => byText("App details") ?? [...document.querySelectorAll("a,button,[role=menuitem]")]
+    .find((e) => text(e) === "App details"), "the App details action")).click();
+  const name = await waitFor(() => document.querySelector(".modal input:not([type=file])"), "the name field");
+  assert.equal(name.value, "Example");
+  // Save is disabled until the scaffold's rules have loaded, and the sheet has
+  // settled by then: typing sooner would be reset by its on-open effect.
+  await waitFor(() => byText("Save", document.querySelector(".modal"))?.disabled === false,
+    "the sheet to be ready");
+  await new Promise((r) => setTimeout(r, 50));
+
+  const type = async (el, value) => {
+    el.value = value;
+    el.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 0));
+  };
+  await type(name, "my app");
+  await waitFor(() => /Letters, numbers and underscore/.test(text(document.querySelector(".modal"))),
+    "the name rule");
+
+  await type(name, "Garden");
+  await type(document.querySelector(".modal textarea"), "Plants");
+  byText("Save", document.querySelector(".modal")).click();
+
+  await waitFor(() => window.location.hash === "#/code/Garden", "the new route");
+  assert.deepEqual(JSON.parse(host.files.get(`${base}/Garden/acelery_app.json`)), {
+    name: "Garden", description: "Plants", entry: "example.js",
+  });
+  assert.ok(host.files.has(`${base}/Garden/example.js`));
+  assert.ok(![...host.files.keys()].some((f) => f.startsWith(`${base}/Example/`)));
 });
 
 test("opening a file records it for Home's Continue card", async () => {
