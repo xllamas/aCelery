@@ -254,3 +254,4 @@ original Android app carry it; the file makes it explicit rather than implied.
 The `LICENSE` file is the verbatim FSF text. Its closing section is the
 standard "How to Apply These Terms" appendix, so the `<year>` and
 `<name of author>` placeholders in it are instructions, not blanks to fill in.
+
